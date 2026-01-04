@@ -230,6 +230,7 @@ class DeckState:
             "marp: true\n"
             "theme: default\n"
             "paginate: true\n"
+            "html: true\n"
             "---\n\n"
         )
         slides = [
@@ -346,6 +347,86 @@ class ExportDialog(QDialog):
         fmt = str(self.format_combo.currentData())
         allow_local = bool(self.allow_local_chk.isChecked())
         return out_path, fmt, allow_local
+
+
+class InsertImageDialog(QDialog):
+    def __init__(self, parent: QWidget, base_path: Optional[Path] = None):
+        super().__init__(parent)
+        self.setWindowTitle("Insert Picture")
+        self.setModal(True)
+        self.resize(500, 300)
+        self.base_path = base_path
+
+        layout = QVBoxLayout(self)
+
+        # File selection
+        row1 = QHBoxLayout()
+        row1.addWidget(QLabel("Image Path:"))
+        self.path_edit = QLineEdit()
+        row1.addWidget(self.path_edit, 1)
+        browse = QPushButton("Browse…")
+        browse.clicked.connect(self._browse)
+        row1.addWidget(browse)
+        layout.addLayout(row1)
+
+        # Position
+        grp_pos = QWidget()
+        l_pos = QHBoxLayout(grp_pos)
+        l_pos.setContentsMargins(0, 0, 0, 0)
+        l_pos.addWidget(QLabel("X (Left):"))
+        self.x_edit = QLineEdit("100px")
+        l_pos.addWidget(self.x_edit)
+        l_pos.addWidget(QLabel("Y (Top):"))
+        self.y_edit = QLineEdit("100px")
+        l_pos.addWidget(self.y_edit)
+        layout.addWidget(QLabel("Position (absolute):"))
+        layout.addWidget(grp_pos)
+
+        # Size
+        grp_size = QWidget()
+        l_size = QHBoxLayout(grp_size)
+        l_size.setContentsMargins(0, 0, 0, 0)
+        l_size.addWidget(QLabel("Width:"))
+        self.w_edit = QLineEdit("300px")
+        l_size.addWidget(self.w_edit)
+        l_size.addWidget(QLabel("Height:"))
+        self.h_edit = QLineEdit("auto")
+        l_size.addWidget(self.h_edit)
+        layout.addWidget(QLabel("Size:"))
+        layout.addWidget(grp_size)
+
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+
+    def _browse(self):
+        start_dir = str(self.base_path.parent) if self.base_path else ""
+        p, _ = QFileDialog.getOpenFileName(self, "Select Image", start_dir, "Images (*.png *.jpg *.jpeg *.svg *.gif);;All files (*)")
+        if p:
+            # Try to make relative if possible
+            if self.base_path:
+                try:
+                    rel = os.path.relpath(p, self.base_path.parent)
+                    p = rel
+                except ValueError:
+                    pass
+            self.path_edit.setText(p)
+
+    def get_html_tag(self) -> str:
+        src = self.path_edit.text().strip()
+        x = self.x_edit.text().strip()
+        y = self.y_edit.text().strip()
+        w = self.w_edit.text().strip()
+        h = self.h_edit.text().strip()
+
+        style = "position: absolute;"
+        if x: style += f" left: {x};"
+        if y: style += f" top: {y};"
+        if w: style += f" width: {w};"
+        if h and h != "auto": style += f" height: {h};"
+
+        return f'<img src="{src}" style="{style}" />'
 
 
 class MainWindow(QMainWindow):
@@ -508,6 +589,8 @@ class MainWindow(QMainWindow):
         img_menu.addAction("Split background (left)", lambda: self.insert_template("![bg left](path-or-url)\n\n"))
         img_menu.addAction("Split background (right)", lambda: self.insert_template("![bg right](path-or-url)\n\n"))
         img_menu.addAction("Split background (left:33%)", lambda: self.insert_template("![bg left:33%](path-or-url)\n\n"))
+        img_menu.addSeparator()
+        img_menu.addAction("Insert Picture (absolute)…", self.insert_picture_dialog)
         img_btn.setMenu(img_menu)
         fmt_tb.addSeparator()
         fmt_tb.addWidget(img_btn)
@@ -857,6 +940,17 @@ class MainWindow(QMainWindow):
     def insert_presenter_note(self):
         snippet = "<!--\nPresenter notes...\n-->\n"
         self.insert_template(snippet)
+
+    def insert_picture_dialog(self):
+        if not self.deck.file_path:
+            QMessageBox.warning(self, "Save first", "Please save the deck first so we can resolve relative paths.")
+            return
+
+        dlg = InsertImageDialog(self, base_path=self.deck.file_path)
+        if dlg.exec():
+            html_tag = dlg.get_html_tag()
+            self.insert_template(html_tag)
+
 
     # ---------------- Preview rendering ----------------
     def _schedule_preview(self):

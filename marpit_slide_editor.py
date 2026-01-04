@@ -793,6 +793,7 @@ class MainWindow(QMainWindow):
         self.load_from_path(Path(path_str))
 
     def load_from_path(self, p: Path):
+        p = p.resolve()
         try:
             text = p.read_text(encoding="utf-8")
         except Exception as e:
@@ -994,6 +995,17 @@ class MainWindow(QMainWindow):
         preview_md = (self.deck.preamble or "") + (slide_md + "\n")
 
         h = hashlib.sha256(preview_md.encode("utf-8")).hexdigest()
+
+        # Determine where to write the preview file
+        # If we have a real file, write a hidden preview file in the same dir so relative paths work.
+        if self.deck.file_path:
+            self._preview_md_path = self.deck.file_path.parent / ".marp_preview.md"
+            self._preview_html_path = self.deck.file_path.parent / ".marp_preview.html"
+        else:
+            # Fallback to temp dir
+            self._preview_md_path = Path(self._tmp_dir.name) / "preview.md"
+            self._preview_html_path = Path(self._tmp_dir.name) / "preview.html"
+
         if h == self._last_preview_hash and self._preview_html_path.exists():
             # Nothing changed
             return
@@ -1021,12 +1033,15 @@ class MainWindow(QMainWindow):
         import subprocess
 
         try:
+            # We want to run in the same dir as the preview file
+            cwd = self._preview_md_path.parent
+
             proc = subprocess.run(
                 [program] + args,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
-                cwd=str(self.deck.file_path.parent) if self.deck.file_path else None,
+                cwd=str(cwd),
                 timeout=10,
             )
         except Exception as e:

@@ -40,7 +40,7 @@ from pathlib import Path
 from typing import List, Optional, Tuple
 
 from PySide6.QtCore import Qt, QTimer, QUrl, QSize
-from PySide6.QtGui import QAction, QFont, QKeySequence, QTextCursor
+from PySide6.QtGui import QAction, QFont, QKeySequence, QTextCursor, QSyntaxHighlighter, QTextCharFormat, QColor
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
@@ -72,6 +72,31 @@ try:
 except Exception:
     WEBENGINE_AVAILABLE = False
     QWebEngineView = None  # type: ignore
+
+try:
+    from spellchecker import SpellChecker
+    SPELLCHECK_AVAILABLE = True
+except ImportError:
+    SPELLCHECK_AVAILABLE = False
+
+if SPELLCHECK_AVAILABLE:
+    class SpellCheckHighlighter(QSyntaxHighlighter):
+        def __init__(self, document):
+            super().__init__(document)
+            self.spell = SpellChecker(language='en')
+
+            self.error_format = QTextCharFormat()
+            self.error_format.setUnderlineColor(QColor("red"))
+            self.error_format.setUnderlineStyle(QTextCharFormat.SpellCheckUnderline)
+
+        def highlightBlock(self, text):
+            # Simple word extraction using regex
+            import re
+            for match in re.finditer(r'\b[a-zA-Z]+\b', text):
+                word = match.group()
+                if self.spell.unknown([word]):
+                    self.setFormat(match.start(), match.end() - match.start(), self.error_format)
+
 
 
 _HR_RE = re.compile(r"^\s{0,3}((-\s*){3,}|(\*\s*){3,}|(_\s*){3,})\s*$")
@@ -324,7 +349,7 @@ class ExportDialog(QDialog):
 
 
 class MainWindow(QMainWindow):
-    def __init__(self):
+    def __init__(self, initial_file: Optional[Path] = None):
         super().__init__()
         self.setWindowTitle("Marpit Slide Editor")
         self.resize(1400, 850)
@@ -349,10 +374,19 @@ class MainWindow(QMainWindow):
         self.allow_local_files = True
 
         self._build_ui()
+
+        # Set default splitter sizes (approx 2/3 for editor, 1/3 for preview)
+        # Handle initial file load
+        if initial_file and initial_file.exists():
+            self.load_from_path(initial_file)
+
         self._refresh_slide_list()
         self._load_slide_into_editor(0)
         self._update_window_title()
         self._schedule_preview()
+
+        if SPELLCHECK_AVAILABLE:
+            self.highlighter = SpellCheckHighlighter(self.editor.document())
 
     # ---------------- UI ----------------
     def _build_ui(self):
@@ -535,7 +569,8 @@ class MainWindow(QMainWindow):
 
         root_split.addWidget(left_split)
         root_split.addWidget(preview_panel)
-        root_split.setStretchFactor(0, 1)
+        # Default ~2/3 for editor+list, ~1/3 for preview
+        root_split.setStretchFactor(0, 2)
         root_split.setStretchFactor(1, 1)
 
         self.setCentralWidget(root_split)
@@ -669,7 +704,9 @@ class MainWindow(QMainWindow):
         path_str, _ = QFileDialog.getOpenFileName(self, "Open Marp/Marpit Markdown", "", "Markdown (*.md *.markdown *.mdown);;All files (*)")
         if not path_str:
             return
-        p = Path(path_str)
+        self.load_from_path(Path(path_str))
+
+    def load_from_path(self, p: Path):
         try:
             text = p.read_text(encoding="utf-8")
         except Exception as e:
@@ -1027,7 +1064,12 @@ class MainWindow(QMainWindow):
 
 def main():
     app = QApplication(sys.argv)
-    w = MainWindow()
+
+    initial_file = None
+    if len(sys.argv) > 1:
+        initial_file = Path(sys.argv[1])
+
+    w = MainWindow(initial_file=initial_file)
     w.show()
     sys.exit(app.exec())
 

@@ -5,12 +5,13 @@ A single-file GUI editor for Marpit / Marp slide decks, built with Python and Py
 ## Features
 - **Deck Overview**: Vertical list showing all slides.
 - **Slide Editor**: Edit one slide at a time with formatting buttons.
-- **Live Preview**: Real-time rendering using Marp CLI and Qt WebEngine.
+- **Live Preview**: Real-time rendering using Marp CLI and Qt WebEngine (defaults to 1/3 window width).
+- **Spell Check**: Automatic English spell checking (misspelled words underlined in red).
 
 ## Dependencies
 
 ### Python Dependencies
-The project requires **Python 3.9+** and **PySide6**.
+The project requires **Python 3.9+**.
 
 1. Create a virtual environment:
    ```bash
@@ -20,7 +21,7 @@ The project requires **Python 3.9+** and **PySide6**.
    ```bash
    source venv/bin/activate
    ```
-3. Install dependencies:
+3. Install dependencies (PySide6, pyspellchecker):
    ```bash
    pip install -r requirements.txt
    ```
@@ -42,4 +43,10 @@ Run the editor from your virtual environment:
 
 ```bash
 ./venv/bin/python marpit_slide_editor.py
+```
+
+You can also open a specific file directly:
+
+```bash
+./venv/bin/python marpit_slide_editor.py path/to/presentation.md
 ```

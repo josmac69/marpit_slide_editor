@@ -204,7 +204,7 @@ def find_marp_cli_command() -> Optional[List[str]]:
             return cmd
 
     # Check local bin directory
-    local_bin = Path(__file__).parent / "bin" / "marp"
+    local_bin = (Path(__file__).parent / "bin" / "marp").resolve()
     if local_bin.exists():
         return [str(local_bin)]
 
@@ -401,16 +401,19 @@ class InsertImageDialog(QDialog):
         layout.addWidget(buttons)
 
     def _browse(self):
-        start_dir = str(self.base_path.parent) if self.base_path else ""
-        p, _ = QFileDialog.getOpenFileName(self, "Select Image", start_dir, "Images (*.png *.jpg *.jpeg *.svg *.gif);;All files (*)")
+        # We start in the CWD (which should mean the deck's directory if loaded/saved)
+        # But we can also fallback to base_path if provided.
+        start = str(self.base_path.parent) if (self.base_path and self.base_path.parent.exists()) else os.getcwd()
+
+        p, _ = QFileDialog.getOpenFileName(self, "Select Image", start, "Images (*.png *.jpg *.jpeg *.svg *.gif);;All files (*)")
         if p:
-            # Try to make relative if possible
-            if self.base_path:
-                try:
-                    rel = os.path.relpath(p, self.base_path.parent)
-                    p = rel
-                except ValueError:
-                    pass
+            # Always try to make it relative to CWD (which is where the deck is)
+            try:
+                rel = os.path.relpath(p, os.getcwd())
+                p = rel
+            except ValueError:
+                # If on different drive or fails, keep absolute
+                pass
             self.path_edit.setText(p)
 
     def get_html_tag(self) -> str:
@@ -800,6 +803,13 @@ class MainWindow(QMainWindow):
         self._current_slide_idx = 0
         self._refresh_slide_list()
         self._load_slide_into_editor(0)
+
+        # Switch CWD to the loaded file's directory
+        try:
+            os.chdir(p.parent)
+        except Exception:
+            pass
+
         self._update_window_title()
         self._update_status("Deck loaded.")
         self._schedule_preview()
@@ -832,7 +842,14 @@ class MainWindow(QMainWindow):
         except Exception as e:
             QMessageBox.critical(self, "Save failed", f"Could not write file:\n{path}\n\n{e}")
             return False
+
         self.deck.dirty = False
+        # Switch CWD to the saved file's directory
+        try:
+            os.chdir(path.parent)
+        except Exception:
+            pass
+
         self._update_window_title()
         self._update_status("Saved.")
         return True

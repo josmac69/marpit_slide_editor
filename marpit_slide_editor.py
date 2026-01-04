@@ -33,8 +33,10 @@ import os
 import re
 import shlex
 import shutil
+import shutil
 import sys
 import tempfile
+import json
 from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Optional, Tuple
@@ -433,10 +435,11 @@ class InsertImageDialog(QDialog):
 
 
 class MainWindow(QMainWindow):
-    def __init__(self, initial_file: Optional[Path] = None):
+    def __init__(self, initial_file: Optional[Path] = None, launch_cwd: Optional[Path] = None):
         super().__init__()
         self.setWindowTitle("Marpit Slide Editor")
         self.resize(1400, 850)
+        self.launch_cwd = launch_cwd or Path.cwd()
 
         self.marp_cmd = find_marp_cli_command()
 
@@ -459,7 +462,13 @@ class MainWindow(QMainWindow):
 
         self._build_ui()
 
-        # Set default splitter sizes (approx 2/3 for editor, 1/3 for preview)
+        # Default ~2/3 for editor+list, ~1/3 for preview
+        self.root_split.setStretchFactor(0, 2)
+        self.root_split.setStretchFactor(1, 1)
+
+        # Restore config if available
+        self._load_config()
+
         # Handle initial file load
         if initial_file and initial_file.exists():
             self.load_from_path(initial_file)
@@ -534,7 +543,7 @@ class MainWindow(QMainWindow):
         slide_tb.addAction(act_del)
 
         # Central layout: left half (deck overview + editor) and right half (preview)
-        root_split = QSplitter(Qt.Horizontal)
+        self.root_split = QSplitter(Qt.Horizontal)
         left_split = QSplitter(Qt.Horizontal)
 
         # Slide list (overview)
@@ -653,13 +662,13 @@ class MainWindow(QMainWindow):
             )
             preview_layout.addWidget(self.preview, 1)
 
-        root_split.addWidget(left_split)
-        root_split.addWidget(preview_panel)
+        self.root_split.addWidget(left_split)
+        self.root_split.addWidget(preview_panel)
         # Default ~2/3 for editor+list, ~1/3 for preview
-        root_split.setStretchFactor(0, 2)
-        root_split.setStretchFactor(1, 1)
+        self.root_split.setStretchFactor(0, 2)
+        self.root_split.setStretchFactor(1, 1)
 
-        self.setCentralWidget(root_split)
+        self.setCentralWidget(self.root_split)
 
         # Status bar
         sb = QStatusBar()
@@ -1162,6 +1171,40 @@ class MainWindow(QMainWindow):
         QMessageBox.information(self, "Export complete", f"Generated:\n{out_path}")
         self._update_status(f"Exported {fmt.upper()} to {out_path}")
 
+    # ---------------- Config Persistence ----------------
+    def _get_config_path(self) -> Path:
+        return self.launch_cwd / ".marpit_editor_config.json"
+
+    def _load_config(self):
+        cfg_path = self._get_config_path()
+        if not cfg_path.exists():
+            return
+
+        try:
+            data = json.loads(cfg_path.read_text(encoding="utf-8"))
+            w = data.get("window_width")
+            h = data.get("window_height")
+            if w and h:
+                self.resize(w, h)
+
+            sizes = data.get("splitter_sizes")
+            if sizes and isinstance(sizes, list) and len(sizes) == 2:
+                self.root_split.setSizes(sizes)
+        except Exception:
+            pass # Ignore config errors
+
+    def _save_config(self):
+        cfg_path = self._get_config_path()
+        data = {
+            "window_width": self.width(),
+            "window_height": self.height(),
+            "splitter_sizes": self.root_split.sizes()
+        }
+        try:
+            cfg_path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+        except Exception:
+            pass
+
     # ---------------- Close handling ----------------
     def _confirm_discard_if_dirty(self) -> bool:
         if not self.deck.dirty:
@@ -1180,6 +1223,7 @@ class MainWindow(QMainWindow):
         return False
 
     def closeEvent(self, event):  # type: ignore
+        self._save_config()
         if not self._confirm_discard_if_dirty():
             event.ignore()
             return
@@ -1197,7 +1241,10 @@ def main():
     if len(sys.argv) > 1:
         initial_file = Path(sys.argv[1])
 
-    w = MainWindow(initial_file=initial_file)
+    # Capture directory from where script was run (before any chdir happens inside app)
+    launch_cwd = Path.cwd()
+
+    w = MainWindow(initial_file=initial_file, launch_cwd=launch_cwd)
     w.show()
     sys.exit(app.exec())
 

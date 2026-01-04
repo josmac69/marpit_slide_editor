@@ -1023,6 +1023,7 @@ class MainWindow(QMainWindow):
         args.extend(self.marp_cmd[1:])
         args.append(str(self._preview_md_path))
         args.extend(["-o", str(self._preview_html_path)])
+        args.append("--html")
         if self.allow_local_files:
             args.append("--allow-local-files")
 
@@ -1127,6 +1128,7 @@ class MainWindow(QMainWindow):
 
         args.append(str(input_path))
         args.extend(["-o", str(out_path)])
+        args.append("--html")
 
         program = self.marp_cmd[0]
         import subprocess

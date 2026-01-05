@@ -47,6 +47,7 @@ from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
     QComboBox,
+    QColorDialog,
     QDialog,
     QDialogButtonBox,
     QDoubleSpinBox,
@@ -608,9 +609,9 @@ class GlobalHeaderFooterDialog(QDialog):
         lay = QVBoxLayout(widget)
 
         # Text Content (Markdown)
-        lay.addWidget(QLabel(f"{label} Content (Markdown):"))
+        lay.addWidget(QLabel(f"{label} Content (Inline Markdown only - no # headings):"))
         text_edit = QTextEdit()
-        text_edit.setPlaceholderText(f"Enter {label.lower()} text here. You can use markdown and images.")
+        text_edit.setPlaceholderText(f"Enter {label.lower()} text here. You can use bold, italic, images, etc.")
         lay.addWidget(text_edit, 1)
 
         # Image Button
@@ -646,6 +647,31 @@ class GlobalHeaderFooterDialog(QDialog):
         align_combo.setCurrentIndex(0) # Default Left
         glay.addRow("Alignment:", align_combo)
 
+        # Font Size
+        fs_spin = QSpinBox()
+        fs_spin.setRange(8, 100)
+        fs_spin.setValue(18) # Default
+        fs_spin.setSuffix(" px")
+        glay.addRow("Font Size:", fs_spin)
+
+        # Font Family
+        font_combo = QComboBox()
+        font_combo.addItem("Default", "")
+        font_combo.addItem("Arial (Sans)", "Arial, Helvetica, sans-serif")
+        font_combo.addItem("Times New Roman (Serif)", '"Times New Roman", Times, serif')
+        font_combo.addItem("Courier New (Mono)", '"Courier New", Courier, monospace')
+        font_combo.addItem("Georgia (Serif)", "Georgia, serif")
+        font_combo.addItem("Verdana (Sans)", "Verdana, Geneva, sans-serif")
+        glay.addRow("Font Family:", font_combo)
+
+        # Text Color
+        color_btn = QPushButton()
+        color_btn.setText("Pick Color...")
+        # Store color in a property
+        color_btn.setProperty("selected_color", "")
+        color_btn.clicked.connect(lambda: self._pick_color(color_btn))
+        glay.addRow("Text Color:", color_btn)
+
         lay.addWidget(grp)
 
         return {
@@ -653,8 +679,20 @@ class GlobalHeaderFooterDialog(QDialog):
             'text': text_edit,
             'height': h_spin,
             'offset': off_spin,
-            'align': align_combo
+            'align': align_combo,
+            'font_size': fs_spin,
+            'font_family': font_combo,
+            'color': color_btn
         }
+
+    def _pick_color(self, btn: QPushButton):
+        curr = btn.property("selected_color") or "#000000"
+        c = QColorDialog.getColor(QColor(curr), self, "Select Text Color")
+        if c.isValid():
+            hex_c = c.name()
+            btn.setProperty("selected_color", hex_c)
+            btn.setStyleSheet(f"background-color: {hex_c}; color: {'white' if c.lightness() < 128 else 'black'}")
+            btn.setText(hex_c)
 
     def _insert_image(self, editor: QTextEdit):
         start = str(self.base_path.parent) if (self.base_path and self.base_path.parent.exists()) else os.getcwd()
@@ -682,7 +720,11 @@ class GlobalHeaderFooterDialog(QDialog):
             'content': ui['text'].toPlainText(),
             'height': ui['height'].value(),
             'offset': ui['offset'].value(),
-            'align': ui['align'].currentData()
+            'offset': ui['offset'].value(),
+            'align': ui['align'].currentData(),
+            'font_size': ui['font_size'].value(),
+            'font_family': ui['font_family'].currentData(),
+            'color': ui['color'].property("selected_color")
         }
 
     def load_settings(self, data: dict):
@@ -700,6 +742,29 @@ class GlobalHeaderFooterDialog(QDialog):
         idx = ui['align'].findData(al)
         if idx >= 0:
             ui['align'].setCurrentIndex(idx)
+
+        ui['font_size'].setValue(int(d.get('font_size', 18)))
+
+        # Font Family
+        fam = d.get('font_family', '')
+        idx = ui['font_family'].findData(fam)
+        if idx >= 0: ui['font_family'].setCurrentIndex(idx)
+        else: ui['font_family'].setCurrentIndex(0)
+
+        # Color
+        col = d.get('color', '')
+        if col:
+             ui['color'].setProperty("selected_color", col)
+             ui['color'].setText(col)
+             try:
+                 c = QColor(col)
+                 if c.isValid():
+                     ui['color'].setStyleSheet(f"background-color: {col}; color: {'white' if c.lightness() < 128 else 'black'}")
+             except: pass
+        else:
+             ui['color'].setProperty("selected_color", "")
+             ui['color'].setText("Pick Color...")
+             ui['color'].setStyleSheet("")
 
 
 class MainWindow(QMainWindow):
@@ -1454,8 +1519,12 @@ class MainWindow(QMainWindow):
             return default
 
         # Header CSS
+        # Header CSS
         h_height = extract_css("header", "height", 100)
         h_top = extract_css("header", "top", 0)
+        h_size = extract_css("header", "font-size", 18)
+        h_color = extract_css("header", "color", "")
+        h_fam = extract_css("header", "font-family", "")
         if isinstance(h_top, str): h_top = 0 # Safety
 
         # Header Align
@@ -1469,6 +1538,9 @@ class MainWindow(QMainWindow):
         # Footer CSS
         f_height = extract_css("footer", "height", 50)
         f_bottom = extract_css("footer", "bottom", 0)
+        f_size = extract_css("footer", "font-size", 18)
+        f_color = extract_css("footer", "color", "")
+        f_fam = extract_css("footer", "font-family", "")
         if isinstance(f_bottom, str): f_bottom = 0
 
         f_align = extract_css("footer", "text-align", "left")
@@ -1477,8 +1549,8 @@ class MainWindow(QMainWindow):
              f_align = "spread"
 
         dlg.load_settings({
-            'header': {'content': header_content, 'height': h_height, 'offset': h_top, 'align': h_align},
-            'footer': {'content': footer_content, 'height': f_height, 'offset': f_bottom, 'align': f_align}
+            'header': {'content': header_content, 'height': h_height, 'offset': h_top, 'align': h_align, 'font_size': h_size, 'font_family': h_fam, 'color': h_color},
+            'footer': {'content': footer_content, 'height': f_height, 'offset': f_bottom, 'align': f_align, 'font_size': f_size, 'font_family': f_fam, 'color': f_color}
         })
 
         if dlg.exec():
@@ -1506,6 +1578,11 @@ class MainWindow(QMainWindow):
             def gen_css(sel, d, is_top=True):
                 css = f"{sel} {{\n"
                 css += f"  height: {d['height']}px;\n"
+                css += f"  font-size: {d['font_size']}px;\n"
+                if d.get('color'):
+                    css += f"  color: {d['color']};\n"
+                if d.get('font_family'):
+                    css += f"  font-family: {d['font_family']};\n"
                 if d['align'] == 'spread':
                     css += "  display: flex;\n"
                     css += "  justify-content: space-between;\n"

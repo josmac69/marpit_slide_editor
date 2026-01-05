@@ -3,8 +3,8 @@ marp: true
 theme: default
 paginate: true
 html: true
-header: "### FedCon 2026 - creative workshop"
-footer: "### Josef Machytka 2026"
+header: "FedCon 2026 - creative workshop"
+footer: "Josef Machytka 2026"
 style: |
   body, .marpit {
     background-color: white !important;
@@ -18,11 +18,15 @@ style: |
   }
   header {
     height: 100px;
+    font-size: 24px;
+    color: #c01c28;
     text-align: left;
     display: block;
   }
   footer {
     height: 50px;
+    font-size: 15px;
+    color: #1a5fb4;
     text-align: left;
     display: block;
   }

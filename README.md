@@ -7,6 +7,7 @@ A single-file GUI editor for Marpit / Marp slide decks, built with Python and Py
 - **Slide Editor**: Edit one slide at a time with formatting buttons.
 - **Live Preview**: Real-time rendering using Marp CLI and Qt WebEngine (defaults to 1/3 window width).
 - **Spell Check**: Automatic English spell checking (misspelled words underlined in red).
+- **Configurable Pagination**: Toggle page numbers and customize their font, size, color, and position via the 'Deck' menu.
 
 ## Dependencies
 

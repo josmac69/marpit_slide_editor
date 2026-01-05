@@ -767,7 +767,190 @@ class GlobalHeaderFooterDialog(QDialog):
              ui['color'].setStyleSheet("")
 
 
+
+class PaginationDialog(QDialog):
+    def __init__(self, parent: QWidget, base_path: Optional[Path] = None):
+        super().__init__(parent)
+        self.setWindowTitle("Pagination Settings")
+        self.setModal(True)
+        self.resize(400, 300)
+        self.base_path = base_path
+
+        layout = QVBoxLayout(self)
+
+        # Enable/Disable
+        self.chk_paginate = QCheckBox("Show Page Numbers")
+        layout.addWidget(self.chk_paginate)
+
+        grp = QGroupBox("Appearance")
+        glay = QFormLayout(grp)
+
+        # Font Size
+        self.spin_size = QSpinBox()
+        self.spin_size.setRange(8, 100)
+        self.spin_size.setValue(18)
+        self.spin_size.setSuffix(" px")
+        glay.addRow("Font Size:", self.spin_size)
+
+        # Font Family
+        self.combo_font = QComboBox()
+        self.combo_font.addItem("Default", "")
+        self.combo_font.addItem("Arial (Sans)", "Arial, Helvetica, sans-serif")
+        self.combo_font.addItem("Times New Roman (Serif)", '"Times New Roman", Times, serif')
+        self.combo_font.addItem("Courier New (Mono)", '"Courier New", Courier, monospace')
+        self.combo_font.addItem("Verdana (Sans)", "Verdana, Geneva, sans-serif")
+        glay.addRow("Font Family:", self.combo_font)
+
+        # Color
+        self.btn_color = QPushButton("Pick Color...")
+        self.btn_color.setProperty("selected_color", "")
+        self.btn_color.clicked.connect(self._pick_color)
+        glay.addRow("Color:", self.btn_color)
+
+        # Position (CSS logic is section::after { right: X, bottom: Y } etc)
+        self.combo_pos = QComboBox()
+        self.combo_pos.addItem("Bottom Right", "bottom-right")
+        self.combo_pos.addItem("Bottom Left", "bottom-left")
+        self.combo_pos.addItem("Top Right", "top-right")
+        self.combo_pos.addItem("Top Left", "top-left")
+        glay.addRow("Position:", self.combo_pos)
+
+        layout.addWidget(grp)
+
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+        
+        # Disable appearance if unchecked
+        self.chk_paginate.toggled.connect(grp.setEnabled)
+
+    def _pick_color(self):
+        curr = self.btn_color.property("selected_color") or "#000000"
+        c = QColorDialog.getColor(QColor(curr), self, "Select Color")
+        if c.isValid():
+            hex_c = c.name()
+            self.btn_color.setProperty("selected_color", hex_c)
+            self.btn_color.setStyleSheet(f"background-color: {hex_c}; color: {'white' if c.lightness() < 128 else 'black'}")
+            self.btn_color.setText(hex_c)
+
+    def load_settings(self, enabled: bool, size: int, font: str, color: str, pos: str):
+        self.chk_paginate.setChecked(enabled)
+        self.spin_size.setValue(size)
+        
+        idx = self.combo_font.findData(font)
+        if idx >= 0: self.combo_font.setCurrentIndex(idx)
+        else: self.combo_font.setCurrentIndex(0)
+
+        if color:
+             self.btn_color.setProperty("selected_color", color)
+             self.btn_color.setText(color)
+             self.btn_color.setStyleSheet(f"background-color: {color}; color: auto")
+        
+        idx_pos = self.combo_pos.findData(pos)
+        if idx_pos >= 0: self.combo_pos.setCurrentIndex(idx_pos)
+
+    def get_settings(self):
+        return {
+            'enabled': self.chk_paginate.isChecked(),
+            'size': self.spin_size.value(),
+            'font': self.combo_font.currentData(),
+            'color': self.btn_color.property("selected_color"),
+            'pos': self.combo_pos.currentData()
+        }
+
+class PaginationDialog(QDialog):
+    def __init__(self, parent: QWidget, base_path: Optional[Path] = None):
+        super().__init__(parent)
+        self.setWindowTitle("Pagination Settings")
+        self.setModal(True)
+        self.resize(400, 300)
+        self.base_path = base_path
+
+        layout = QVBoxLayout(self)
+
+        # Enable/Disable
+        self.chk_paginate = QCheckBox("Show Page Numbers")
+        layout.addWidget(self.chk_paginate)
+
+        grp = QGroupBox("Appearance")
+        glay = QFormLayout(grp)
+
+        # Font Size
+        self.spin_size = QSpinBox()
+        self.spin_size.setRange(8, 100)
+        self.spin_size.setValue(18)
+        self.spin_size.setSuffix(" px")
+        glay.addRow("Font Size:", self.spin_size)
+
+        # Font Family
+        self.combo_font = QComboBox()
+        self.combo_font.addItem("Default", "")
+        self.combo_font.addItem("Arial (Sans)", "Arial, Helvetica, sans-serif")
+        self.combo_font.addItem("Times New Roman (Serif)", '"Times New Roman", Times, serif')
+        self.combo_font.addItem("Courier New (Mono)", '"Courier New", Courier, monospace')
+        self.combo_font.addItem("Verdana (Sans)", "Verdana, Geneva, sans-serif")
+        glay.addRow("Font Family:", self.combo_font)
+
+        # Color
+        self.btn_color = QPushButton("Pick Color...")
+        self.btn_color.setProperty("selected_color", "")
+        self.btn_color.clicked.connect(self._pick_color)
+        glay.addRow("Color:", self.btn_color)
+
+        # Position
+        self.combo_pos = QComboBox()
+        self.combo_pos.addItem("Bottom Right", "bottom-right")
+        self.combo_pos.addItem("Bottom Left", "bottom-left")
+        self.combo_pos.addItem("Top Right", "top-right")
+        self.combo_pos.addItem("Top Left", "top-left")
+        glay.addRow("Position:", self.combo_pos)
+
+        layout.addWidget(grp)
+
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+        
+        self.chk_paginate.toggled.connect(grp.setEnabled)
+
+    def _pick_color(self):
+        curr = self.btn_color.property("selected_color") or "#000000"
+        c = QColorDialog.getColor(QColor(curr), self, "Select Color")
+        if c.isValid():
+            hex_c = c.name()
+            self.btn_color.setProperty("selected_color", hex_c)
+            self.btn_color.setStyleSheet(f"background-color: {hex_c}; color: {'white' if c.lightness() < 128 else 'black'}")
+            self.btn_color.setText(hex_c)
+
+    def load_settings(self, enabled: bool, size: int, font: str, color: str, pos: str):
+        self.chk_paginate.setChecked(enabled)
+        self.spin_size.setValue(size)
+        
+        idx = self.combo_font.findData(font)
+        if idx >= 0: self.combo_font.setCurrentIndex(idx)
+        else: self.combo_font.setCurrentIndex(0)
+
+        if color:
+             self.btn_color.setProperty("selected_color", color)
+             self.btn_color.setText(color)
+             self.btn_color.setStyleSheet(f"background-color: {color}; color: auto")
+        
+        idx_pos = self.combo_pos.findData(pos)
+        if idx_pos >= 0: self.combo_pos.setCurrentIndex(idx_pos)
+
+    def get_settings(self):
+        return {
+            'enabled': self.chk_paginate.isChecked(),
+            'size': self.spin_size.value(),
+            'font': self.combo_font.currentData(),
+            'color': self.btn_color.property("selected_color"),
+            'pos': self.combo_pos.currentData()
+        }
+
 class MainWindow(QMainWindow):
+
     def __init__(self, initial_file: Optional[Path] = None, launch_cwd: Optional[Path] = None):
         super().__init__()
         self.setWindowTitle("Marpit Slide Editor")
@@ -881,6 +1064,7 @@ class MainWindow(QMainWindow):
         # Global Settings
         deck_menu.addAction("Set global background...", self.set_global_background)
         deck_menu.addAction("Set global header/footer...", self.set_global_header_footer)
+        deck_menu.addAction("Pagination...", self.edit_pagination)
         deck_menu.addAction("Edit Front-matter (YAML)...", self.edit_deck_directives)
         deck_menu.addSeparator()
 
@@ -1519,6 +1703,140 @@ class MainWindow(QMainWindow):
         in_style = False
         lines = pre.strip().split("\n")
 
+        import textwrap
+
+        for line in lines:
+            if re.match(r"^style\s*:", line):
+                in_style = True
+                continue
+            if in_style:
+                if line.strip() == "" or line.startswith(" ") or line.startswith("\t"):
+                    style_block_lines.append(line)
+                else:
+                    break
+
+        raw_block = "\n".join(style_block_lines)
+        style_block = textwrap.dedent(raw_block)
+
+        # Helpers to extract CSS props
+        def extract_css(selector, prop, default):
+            m_sel = re.search(rf"{selector}\s*\{{([^}}]*)\}}", style_block, re.DOTALL)
+            if m_sel:
+                block_content = m_sel.group(1)
+                m_prop = re.search(rf"{prop}:\s*([^;]+)", block_content)
+                if m_prop:
+                    val = m_prop.group(1).strip()
+                    if val.endswith("px"):
+                        return int(val[:-2])
+                    return val
+            return default
+
+        # Header CSS
+        h_height = extract_css("header", "height", 100)
+        h_top = extract_css("header", "top", 0)
+        h_size = extract_css("header", "font-size", 18)
+        h_color = extract_css("header", "color", "")
+        h_fam = extract_css("header", "font-family", "")
+        if isinstance(h_top, str): h_top = 0
+
+        h_align = extract_css("header", "text-align", "left")
+        h_display = extract_css("header", "display", "")
+        if "flex" in str(h_display):
+             h_align = "spread"
+
+        # Footer CSS
+        f_height = extract_css("footer", "height", 50)
+        f_bottom = extract_css("footer", "bottom", 0)
+        f_size = extract_css("footer", "font-size", 18)
+        f_color = extract_css("footer", "color", "")
+        f_fam = extract_css("footer", "font-family", "")
+        if isinstance(f_bottom, str): f_bottom = 0
+
+        f_align = extract_css("footer", "text-align", "left")
+        f_display = extract_css("footer", "display", "")
+        if "flex" in str(f_display):
+             f_align = "spread"
+
+        dlg.load_settings({
+            'header': {'content': header_content, 'height': h_height, 'offset': h_top, 'align': h_align, 'font_size': h_size, 'font_family': h_fam, 'color': h_color},
+            'footer': {'content': footer_content, 'height': f_height, 'offset': f_bottom, 'align': f_align, 'font_size': f_size, 'font_family': f_fam, 'color': f_color}
+        })
+
+        if dlg.exec():
+            data = dlg.get_settings()
+
+            existing_lines = pre.strip().split("\n")
+            if existing_lines and existing_lines[0] == "---": existing_lines.pop(0)
+            if existing_lines and existing_lines[-1] == "---": existing_lines.pop()
+
+            new_lines = []
+            in_style = False
+            
+            for line in existing_lines:
+                if re.match(r"^header\s*:", line) or re.match(r"^footer\s*:", line):
+                    continue
+                if re.match(r"^style\s*:", line):
+                    in_style = True
+                    continue
+                if in_style:
+                    if line.strip() == "" or line.startswith(" ") or line.startswith("\t"):
+                        continue
+                    else:
+                        in_style = False
+                new_lines.append(line)
+
+            common_css = style_block
+            common_css = re.sub(r"header\s*\{[^}]*\}", "", common_css)
+            common_css = re.sub(r"footer\s*\{[^}]*\}", "", common_css)
+            common_css = re.sub(r"\n{3,}", "\n\n", common_css).strip()
+
+            if data['header']['content']:
+                 safe_h = data['header']['content'].replace('"', '\\"')
+                 new_lines.append(f'header: "{safe_h}"')
+            
+            if data['footer']['content']:
+                 safe_f = data['footer']['content'].replace('"', '\\"')
+                 new_lines.append(f'footer: "{safe_f}"')
+
+            h_css = ""
+            if data['header']['content']: 
+                d = data['header']
+                align = d['align']
+                disp = "block"
+                if align == "spread":
+                    align = "left"
+                    disp = "flex; justify-content: space-between"
+                
+                h_css = f"header {{\n  height: {d['height']}px;\n  top: {d['offset']}px;\n  font-size: {d['font_size']}px;\n  text-align: {align};\n"
+                if disp != "block": h_css += f"  display: {disp};\n"
+                if d['font_family']: h_css += f"  font-family: {d['font_family']};\n"
+                if d['color']: h_css += f"  color: {d['color']};\n"
+                h_css += "}\n"
+
+            f_css = ""
+            if data['footer']['content']:
+                d = data['footer']
+                align = d['align']
+                disp = "block"
+                if align == "spread":
+                    align = "left"
+                    disp = "flex; justify-content: space-between"
+
+                f_css = f"footer {{\n  height: {d['height']}px;\n  bottom: {d['offset']}px;\n  font-size: {d['font_size']}px;\n  text-align: {align};\n"
+                if disp != "block": f_css += f"  display: {disp};\n"
+                if d['font_family']: f_css += f"  font-family: {d['font_family']};\n"
+                if d['color']: f_css += f"  color: {d['color']};\n"
+                f_css += "}\n"
+
+            final_style = common_css
+            if h_css: final_style += "\n" + h_css
+            if f_css: final_style += "\n" + f_css
+            
+            if final_style.strip():
+                new_lines.append("style: |")
+                for l in final_style.strip().split("\n"):
+                    new_lines.append(f"  {l}")
+
         # Helper to dedent block
         import textwrap
 
@@ -1680,14 +1998,435 @@ class MainWindow(QMainWindow):
                     if l.strip():
                         final_lines.append(f"  {l}")
 
-            final_lines.append("---")
-
-            self.deck.preamble = "\n".join(final_lines) + "\n\n"
+            # Re-assemble
+            self.deck.preamble = "---\n" + "\n".join(final_lines).strip() + "\n---\n\n"
             self.deck.dirty = True
-
             self._update_window_title()
             self._update_status("Global header/footer updated.")
             self._schedule_preview()
+
+
+
+
+
+
+    def edit_pagination(self):
+        if not self.deck.file_path:
+            QMessageBox.warning(self, "Save first", "Please save the deck first.")
+            return
+
+        pre = self.deck.preamble or "---\n\n---\n\n"
+        
+        is_paginated = False
+        if re.search(r"^paginate:\s*true", pre, re.MULTILINE | re.IGNORECASE):
+            is_paginated = True
+            
+        style_block = ""
+        in_style = False
+        for line in pre.split("\n"):
+            if re.match(r"^style\s*:", line):
+                in_style = True
+                continue
+            if in_style:
+                if line.strip() == "" or line.startswith(" ") or line.startswith("\t"):
+                    style_block += line + "\n"
+                else:
+                    break
+        
+        import textwrap
+        style_block = textwrap.dedent(style_block)
+
+        s_size = 18
+        s_font = ""
+        s_color = ""
+        s_pos = "bottom-right"
+        
+        m_sect = re.search(r"section::after\s*\{([^}]*)\}", style_block, re.DOTALL)
+        if m_sect:
+            blk = m_sect.group(1)
+            m = re.search(r"font-size:\s*(\d+)px", blk)
+            if m: s_size = int(m.group(1))
+            m = re.search(r"font-family:\s*([^;]+)", blk)
+            if m: s_font = m.group(1).strip()
+            m = re.search(r"color:\s*([^;]+)", blk)
+            if m: s_color = m.group(1).strip()
+            
+            is_top = "top:" in blk
+            is_left = "left:" in blk
+            if is_top and is_left: s_pos = "top-left"
+            elif is_top: s_pos = "top-right"
+            elif is_left: s_pos = "bottom-left"
+            else: s_pos = "bottom-right"
+
+        dlg = PaginationDialog(self, self.deck.file_path)
+        dlg.load_settings(is_paginated, s_size, s_font, s_color, s_pos)
+        
+        if dlg.exec():
+            d = dlg.get_settings()
+            
+            existing_lines = pre.strip().split("\n")
+            if existing_lines and existing_lines[0] == "---": existing_lines.pop(0)
+            if existing_lines and existing_lines[-1] == "---": existing_lines.pop()
+            
+            new_lines = []
+            in_style = False
+            
+            for line in existing_lines:
+                if re.match(r"^paginate\s*:", line): continue
+                if re.match(r"^style\s*:", line): 
+                    in_style = True
+                    continue
+                if in_style:
+                    if line.strip() == "" or line.startswith(" ") or line.startswith("\t"):
+                        continue
+                    else:
+                        in_style = False
+                new_lines.append(line)
+            
+            if d['enabled']:
+                new_lines.append("paginate: true")
+            else:
+                new_lines.append("paginate: false")
+
+            common_css = style_block
+            common_css = re.sub(r"section::after\s*\{[^}]*\}", "", common_css)
+            common_css = re.sub(r"\n{3,}", "\n\n", common_css).strip()
+            
+            pag_css = ""
+            if d['enabled']:
+                pos_css = ""
+                if d['pos'] == "bottom-right":
+                    pos_css = "bottom: 10px; right: 20px; top: auto; left: auto;"
+                elif d['pos'] == "bottom-left":
+                    pos_css = "bottom: 10px; left: 20px; top: auto; right: auto;"
+                elif d['pos'] == "top-right":
+                    pos_css = "top: 10px; right: 20px; bottom: auto; left: auto;"
+                elif d['pos'] == "top-left":
+                    pos_css = "top: 10px; left: 20px; bottom: auto; right: auto;"
+                
+                font_css = ""
+                if d['font']: font_css += f"  font-family: {d['font']};\n"
+                col_css = ""
+                if d['color']: col_css += f"  color: {d['color']};\n"
+                
+                pag_css = f"section::after {{\n  font-size: {d['size']}px;\n{font_css}{col_css}  {pos_css}\n}}"
+
+            final_style = common_css
+            if pag_css: final_style += "\n" + pag_css
+            
+            if final_style.strip():
+                new_lines.append("style: |")
+                for l in final_style.strip().split("\n"):
+                    new_lines.append(f"  {l}")
+
+            self.deck.preamble = "---\n" + "\n".join(new_lines).strip() + "\n---\n\n"
+
+    # ---------------- Preview rendering ----------------
+    def _schedule_preview(self):
+        # Debounce frequent edits
+        self._preview_timer.start(350)
+
+    def render_preview(self):
+        if not WEBENGINE_AVAILABLE:
+            return
+
+        if not self.marp_cmd:
+            self._set_preview_error(
+                "Marp CLI was not found.\n\n"
+                "Install it:\n"
+                "  npm install -g @marp-team/marp-cli\n\n"
+                "Or set MARP_CLI env var to the marp command.\n"
+            )
+            return
+
+        self._maybe_commit_current_editor()
+
+        # Build preview markdown (preamble + current slide)
+        slide_md = (self.deck.slides[self._current_slide_idx] or "").strip("\n")
+        preview_md = (self.deck.preamble or "") + (slide_md + "\n")
+
+        h = hashlib.sha256(preview_md.encode("utf-8")).hexdigest()
+
+        # Determine where to write the preview file
+        # If we have a real file, write a hidden preview file in the same dir so relative paths work.
+        if self.deck.file_path:
+            self._preview_md_path = self.deck.file_path.parent / ".marp_preview.md"
+            self._preview_html_path = self.deck.file_path.parent / ".marp_preview.html"
+        else:
+            # Fallback to temp dir
+            self._preview_md_path = Path(self._tmp_dir.name) / "preview.md"
+            self._preview_html_path = Path(self._tmp_dir.name) / "preview.html"
+
+        if h == self._last_preview_hash and self._preview_html_path.exists():
+            # Nothing changed
+            return
+        self._last_preview_hash = h
+
+        try:
+            self._preview_md_path.write_text(preview_md, encoding="utf-8")
+        except Exception as e:
+            self._set_preview_error(f"Failed writing preview markdown:\n{e}")
+            return
+
+        # Run marp CLI to generate HTML preview
+        # marp preview.md -o preview.html
+        args = []
+        args.extend(self.marp_cmd[1:])
+        args.append(str(self._preview_md_path))
+        args.extend(["-o", str(self._preview_html_path)])
+        args.append("--html")
+        if self.allow_local_files:
+            args.append("--allow-local-files")
+
+        program = self.marp_cmd[0]
+
+        # Use a simple subprocess to keep this single-file; rendering one slide is fast.
+        # If it fails, show stderr.
+        import subprocess
+
+        try:
+            # We want to run in the same dir as the preview file
+            cwd = self._preview_md_path.parent
+
+            proc = subprocess.run(
+                [program] + args,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                cwd=str(cwd),
+                timeout=10,
+            )
+        except Exception as e:
+            self._set_preview_error(f"Marp CLI failed to run:\n{e}")
+            return
+
+        if proc.returncode != 0:
+            self._set_preview_error("Marp CLI error:\n\n" + (proc.stderr.strip() or proc.stdout.strip() or "(no output)"))
+            return
+
+        if not self._preview_html_path.exists():
+            self._set_preview_error("Preview HTML was not generated (unexpected).")
+            return
+
+        self.preview.load(QUrl.fromLocalFile(str(self._preview_html_path.resolve())))
+        self._update_status("Preview updated.")
+
+    def _set_preview_error(self, message: str):
+        self._update_status("Preview error.")
+        if WEBENGINE_AVAILABLE:
+            html = (
+                "<html><body style='font-family:sans-serif;padding:12px;'>"
+                "<h3>Preview unavailable</h3>"
+                f"<pre style='white-space:pre-wrap'>{self._escape_html(message)}</pre>"
+                "</body></html>"
+            )
+            self.preview.setHtml(html, QUrl.fromLocalFile(str(Path(self._tmp_dir.name).resolve())))
+        else:
+            self.preview.setPlainText(message)
+
+    @staticmethod
+    def _escape_html(s: str) -> str:
+        return (
+            s.replace("&", "&amp;")
+             .replace("<", "&lt;")
+             .replace(">", "&gt;")
+        )
+
+    # ---------------- Export ----------------
+    def export_deck(self):
+        if not self.marp_cmd:
+            QMessageBox.warning(
+                self,
+                "Marp CLI not found",
+                "Marp CLI was not found.\n\nInstall it:\n  npm install -g @marp-team/marp-cli\n\nOr set MARP_CLI env var.",
+            )
+            return
+
+        # For best results, export from a real saved file so relative assets resolve.
+        temp_input: Optional[Path] = None
+        if self.deck.file_path and not self.deck.dirty and self.deck.file_path.exists():
+            input_path = self.deck.file_path
+        else:
+            # Write a temporary input file
+            try:
+                tmp = Path(self._tmp_dir.name) / "export.md"
+                tmp.write_text(serialize_marp_markdown(self.deck.preamble, self.deck.slides), encoding="utf-8")
+                input_path = tmp
+                temp_input = tmp
+            except Exception as e:
+                QMessageBox.critical(self, "Export failed", f"Could not create temporary input deck:\n{e}")
+                return
+
+        default_out = "deck.html"
+        if self.deck.file_path:
+            default_out = str(self.deck.file_path.with_suffix(".html"))
+
+        dlg = ExportDialog(self, default_out=default_out, allow_local=self.allow_local_files)
+        if dlg.exec() != QDialog.Accepted:
+            return
+        out_path, fmt, allow_local = dlg.get_values()
+
+        # Build command arguments
+        args = []
+        args.extend(self.marp_cmd[1:])
+        if fmt == "pdf":
+            args.append("--pdf")
+        elif fmt == "pptx":
+            args.append("--pptx")
+        # HTML is default
+        if allow_local:
+            args.append("--allow-local-files")
+
+        args.append(str(input_path))
+        args.extend(["-o", str(out_path)])
+        args.append("--html")
+
+        program = self.marp_cmd[0]
+        import subprocess
+
+        self._update_status("Export started...")
+
+        try:
+            proc = subprocess.run(
+                [program] + args,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                cwd=str(input_path.parent),
+                timeout=120,
+            )
+        except Exception as e:
+            QMessageBox.critical(self, "Export failed", f"Marp CLI failed to run:\n{e}")
+            self._update_status("Export failed.")
+            return
+
+        if proc.returncode != 0:
+            QMessageBox.critical(
+                self,
+                "Export failed",
+                "Marp CLI returned a non-zero exit code.\n\n"
+                + (proc.stderr.strip() or proc.stdout.strip() or "(no output)"),
+            )
+            self._update_status("Export failed.")
+            return
+
+        QMessageBox.information(self, "Export complete", f"Generated:\n{out_path}")
+        self._update_status(f"Exported {fmt.upper()} to {out_path}")
+
+    # ---------------- Config Persistence ----------------
+    def _get_config_path(self) -> Path:
+        return self.launch_cwd / ".marpit_editor_config.json"
+
+    def _load_config(self):
+        cfg_path = self._get_config_path()
+        if not cfg_path.exists():
+            self._update_recent_menu() # init empty
+            return
+
+        try:
+            data = json.loads(cfg_path.read_text(encoding="utf-8"))
+            w = data.get("window_width")
+            h = data.get("window_height")
+            if w and h:
+                self.resize(w, h)
+
+            sizes = data.get("splitter_sizes")
+            if sizes and isinstance(sizes, list) and len(sizes) == 2:
+                self.root_split.setSizes(sizes)
+
+            # Load recent files
+            self.recent_files = data.get("recent_files", [])
+            # Filter non-existing files? Maybe not, network drives might be offline.
+            self._update_recent_menu()
+
+        except Exception:
+            pass # Ignore config errors
+
+    def _save_config(self):
+        cfg_path = self._get_config_path()
+        data = {
+            "window_width": self.width(),
+            "window_height": self.height(),
+            "splitter_sizes": self.root_split.sizes(),
+            "recent_files": self.recent_files
+        }
+        try:
+            cfg_path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+        except Exception:
+            pass
+
+    def _add_recent_file(self, path: Path):
+        p_str = str(path.resolve())
+        # Remove if exists
+        if p_str in self.recent_files:
+            self.recent_files.remove(p_str)
+        # Add to top
+        self.recent_files.insert(0, p_str)
+        # Cap at 10
+        self.recent_files = self.recent_files[:10]
+        self._update_recent_menu()
+        self._save_config()
+
+    def _update_recent_menu(self):
+        self.menu_recent.clear()
+        if not self.recent_files:
+            act = QAction("No recent files", self)
+            act.setEnabled(False)
+            self.menu_recent.addAction(act)
+            return
+
+        for fpath in self.recent_files:
+             # Use path as text (checking if valid?)
+             # Truncate if too long?
+             fname = Path(fpath).name
+             # Show name, toolip full path
+             # Or show full path if ambiguous?
+             # Let's show "Name (Path)" or just Path
+             # Path is clearer for now
+             act = QAction(fname, self)
+             act.setToolTip(fpath)
+             act.setData(fpath)
+             # Use lambda with default arg to capture fpath properly
+             act.triggered.connect(lambda checked=False, p=fpath: self.load_from_path(Path(p)))
+             self.menu_recent.addAction(act)
+
+        self.menu_recent.addSeparator()
+        act_clear = QAction("Clear recent files", self)
+        act_clear.triggered.connect(self._clear_recent)
+        self.menu_recent.addAction(act_clear)
+
+    def _clear_recent(self):
+        self.recent_files = []
+        self._update_recent_menu()
+        self._save_config()
+
+    # ---------------- Close handling ----------------
+    def _confirm_discard_if_dirty(self) -> bool:
+        if not self.deck.dirty:
+            return True
+        resp = QMessageBox.question(
+            self,
+            "Unsaved changes",
+            "You have unsaved changes. Do you want to save before continuing?",
+            QMessageBox.Save | QMessageBox.Discard | QMessageBox.Cancel,
+            QMessageBox.Save,
+        )
+        if resp == QMessageBox.Save:
+            return bool(self.save_deck())
+        if resp == QMessageBox.Discard:
+            return True
+        return False
+
+    def closeEvent(self, event):  # type: ignore
+        self._save_config()
+        if not self._confirm_discard_if_dirty():
+            event.ignore()
+            return
+        try:
+            self._tmp_dir.cleanup()
+        except Exception:
+            pass
+        event.accept()
 
 
     # ---------------- Preview rendering ----------------

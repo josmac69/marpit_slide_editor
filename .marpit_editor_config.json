@@ -1,11 +1,12 @@
 {
-  "window_width": 2560,
-  "window_height": 1948,
+  "window_width": 2021,
+  "window_height": 1304,
   "splitter_sizes": [
-    1312,
-    1244
+    1033,
+    981
   ],
   "recent_files": [
+    "/Users/josefmachytka/github.com/josmac69/marpit_slide_editor/slides/test2.md",
     "/home/josef/github.com/josmac69/marpit_slide_editor/slides/test2.md"
   ]
 }

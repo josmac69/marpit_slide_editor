@@ -49,6 +49,7 @@ from PySide6.QtWidgets import (
     QComboBox,
     QDialog,
     QDialogButtonBox,
+    QDoubleSpinBox,
     QFileDialog,
     QHBoxLayout,
     QLabel,
@@ -59,6 +60,7 @@ from PySide6.QtWidgets import (
     QMenu,
     QMessageBox,
     QPushButton,
+    QSlider,
     QSplitter,
     QStatusBar,
     QToolBar,
@@ -463,16 +465,44 @@ class GlobalBackgroundDialog(QDialog):
         self.size_combo.addItem("Original size", "auto")
         self.size_combo.addItem("Stretch (100% 100%)", "100% 100%")
         row2.addWidget(self.size_combo, 1)
-        layout.addLayout(row2)
+        # Opacity
+        row3 = QHBoxLayout()
+        row3.addWidget(QLabel("Opacity:"))
+        self.opacity_spin = QDoubleSpinBox()
+        self.opacity_spin.setRange(0.0, 1.0)
+        self.opacity_spin.setSingleStep(0.1)
+        self.opacity_spin.setValue(1.0)
+        row3.addWidget(self.opacity_spin)
 
-        info = QLabel("This will add a 'style' block to the YAML front-matter, applying to ALL slides.")
+        # Slider for convenience
+        self.opacity_slider = QSlider(Qt.Horizontal)
+        self.opacity_slider.setRange(0, 100)
+        self.opacity_slider.setValue(100)
+        self.opacity_slider.valueChanged.connect(self._sync_spin_from_slider)
+        self.opacity_spin.valueChanged.connect(self._sync_slider_from_spin)
+        row3.addWidget(self.opacity_slider, 1)
+
+        layout.addLayout(row3)
+
+        info = QLabel("This will add/update a 'style' block in YAML using 'section::before' for opacity support.")
         info.setStyleSheet("color: gray; font-style: italic;")
+        info.setWordWrap(True)
         layout.addWidget(info)
 
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
+
+    def _sync_spin_from_slider(self, val):
+        self.opacity_spin.blockSignals(True)
+        self.opacity_spin.setValue(val / 100.0)
+        self.opacity_spin.blockSignals(False)
+
+    def _sync_slider_from_spin(self, val):
+        self.opacity_slider.blockSignals(True)
+        self.opacity_slider.setValue(int(val * 100))
+        self.opacity_slider.blockSignals(False)
 
     def _browse(self):
         start = str(self.base_path.parent) if (self.base_path and self.base_path.parent.exists()) else os.getcwd()
@@ -485,22 +515,43 @@ class GlobalBackgroundDialog(QDialog):
                 pass
             self.path_edit.setText(p)
 
+    def load_settings(self, src: str, mode: str, opacity: float):
+        self.path_edit.setText(src)
+        idx = self.size_combo.findData(mode)
+        if idx >= 0:
+            self.size_combo.setCurrentIndex(idx)
+        else:
+            # Maybe it's a raw value not in our list, try to find text match or add it?
+            # For now just default to cover if unknown
+            pass
+        self.opacity_spin.setValue(opacity)
+
     def get_css_content(self) -> str:
         src = self.path_edit.text().strip()
         if not src:
             return ""
 
         mode = self.size_combo.currentData()
+        opacity = self.opacity_spin.value()
 
         # Minimal escape:
         src_escaped = src.replace('"', '%22').replace("'", '%27')
 
+        # To support opacity on background image only (not text), we use ::before
         css = (
             "section {\n"
+            "  background-color: transparent !important;\n"
+            "}\n"
+            "section::before {\n"
+            "  content: \"\";\n"
+            "  position: absolute;\n"
+            "  top: 0; left: 0; right: 0; bottom: 0;\n"
             f"  background-image: url('{src_escaped}');\n"
             "  background-repeat: no-repeat;\n"
             "  background-position: center center;\n"
             f"  background-size: {mode};\n"
+            f"  opacity: {opacity};\n"
+            "  z-index: -1;\n"
             "}"
         )
         return css
@@ -1063,48 +1114,122 @@ class MainWindow(QMainWindow):
             if not css:
                 return
 
-            # Check if preamble already has 'style:' block
-            pre = self.deck.preamble or "---\n\n---\n\n"
+        dlg = GlobalBackgroundDialog(self, base_path=self.deck.file_path)
 
-            # Simple check for existing 'style:' key in YAML
-            # We don't have full YAML parser here, so we do a simple regex check.
-            if re.search(r"^style\s*:", pre, re.MULTILINE):
-                # Existing style block found - too risky to overwrite automatically without parsing.
-                # Let the user handle it via the Directives editor.
-                QMessageBox.information(
-                    self,
-                    "Existing Global Styles",
-                    "Your deck already contains a 'style' block in the YAML front-matter.\n\n"
-                    "Please paste the generated CSS manually into the 'style' section."
-                )
+        # Check for existing background settings to pre-fill
+        # Check for existing background settings to pre-fill
+        pre = self.deck.preamble or "---\n\n---\n\n"
 
-                # Copy css to clipboard
-                QApplication.clipboard().setText(css)
+        # Robust parsing: Find "style:" line, then grab following indented lines (the block)
+        lines = pre.strip().split("\n")
+        style_block_lines = []
+        in_style = False
 
-                # Open directives editor
-                self.edit_deck_directives()
+        for line in lines:
+            if re.match(r"^style\s*:", line):
+                in_style = True
+                continue
+            if in_style:
+                # If indented, it's part of the block
+                if line.strip() == "" or line.startswith(" ") or line.startswith("\t"):
+                    style_block_lines.append(line)
+                else:
+                    # End of block
+                    break
+
+        style_block = "\n".join(style_block_lines)
+        existing_found = False
+
+        if style_block:
+            # Try to extract current values
+            # Looking for url('...'), background-size: ..., opacity: ...
+
+            # Simple heuristic: if it contains section::before, we assume it's ours or compatible
+            if "section::before" in style_block:
+                existing_found = True
+
+                # Extract URL
+                m_url = re.search(r"background-image:\s*url\(['\"](.*?)['\"]\)", style_block)
+                if m_url:
+                    # simplistic de-escape for now
+                    url = m_url.group(1).replace("%22", '"').replace("%27", "'")
+
+                    # Extract Size
+                    m_size = re.search(r"background-size:\s*([^;]+)", style_block)
+                    size = m_size.group(1).strip() if m_size else "cover"
+
+                    # Extract Opacity
+                    m_op = re.search(r"opacity:\s*([\d.]+)", style_block)
+                    op = float(m_op.group(1)) if m_op else 1.0
+
+                    dlg.load_settings(url, size, op)
+
+        if dlg.exec():
+            css = dlg.get_css_content()
+            if not css:
                 return
 
-            # Inject 'style: | ...' into the front matter
-            # We assume front matter ends with '---'
+            # Construct new style block
+            new_style_block = "style: |\n"
+            for line in css.split("\n"):
+                new_style_block += f"  {line}\n"
+
+            # Parse preamble lines
             lines = pre.strip().split("\n")
-            if len(lines) >= 2 and lines[0].strip() == "---" and lines[-1].strip() == "---":
-                # Remove last '---'
-                lines.pop()
-                # Add style block
-                lines.append("style: |")
-                for css_line in css.split("\n"):
-                    lines.append(f"  {css_line}")
-                lines.append("---")
+            if not (len(lines) >= 2 and lines[0].strip() == "---" and lines[-1].strip() == "---"):
+                 QMessageBox.warning(self, "Error", "Could not parse YAML front-matter automatically.")
+                 return
 
-                self.deck.preamble = "\n".join(lines) + "\n\n"
-                self.deck.dirty = True
+            # Remove last '---' temporarily
+            last_marker = lines.pop()
 
-                self._update_window_title()
-                self._update_status("Global background set (YAML).")
-                self._schedule_preview()
-            else:
-                QMessageBox.warning(self, "Error", "Could not parse YAML front-matter automatically.")
+            # Find existing style block lines to remove
+            start_idx = -1
+            end_idx = -1
+
+            for i, line in enumerate(lines):
+                if re.match(r"^style\s*:", line):
+                    start_idx = i
+                    break
+
+            if start_idx != -1:
+                # Found start, find end.
+                # Block ends when indentation returns to 0 or file ends
+                end_idx = len(lines)
+                for j in range(start_idx + 1, len(lines)):
+                    if lines[j].strip() and not lines[j].startswith("  "):
+                        # Found a line that is NOT indented (and not empty) -> end of block
+                        end_idx = j
+                        break
+
+                # Check if it was "our" style block or something else
+                if not existing_found and not "section::before" in "\n".join(lines[start_idx:end_idx]):
+                     # User has some OTHER style block. Warn.
+                     res = QMessageBox.question(
+                         self, "Overwrite Styles?",
+                         "You have existing custom styles defined in the YAML header.\n"
+                         "Overwrite them with the new background settings?",
+                         QMessageBox.Yes | QMessageBox.No
+                     )
+                     if res != QMessageBox.Yes:
+                         # Revert to copy-paste fallback.
+                         QApplication.clipboard().setText(css)
+                         self.edit_deck_directives()
+                         return
+
+                # Remove existing block
+                del lines[start_idx:end_idx]
+
+            # Append new block
+            lines.append(new_style_block.rstrip())
+            lines.append(last_marker)
+
+            self.deck.preamble = "\n".join(lines) + "\n\n"
+            self.deck.dirty = True
+
+            self._update_window_title()
+            self._update_status("Global background updated.")
+            self._schedule_preview()
 
 
     # ---------------- Preview rendering ----------------

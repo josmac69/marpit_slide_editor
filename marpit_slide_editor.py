@@ -51,6 +51,8 @@ from PySide6.QtWidgets import (
     QDialogButtonBox,
     QDoubleSpinBox,
     QFileDialog,
+    QFormLayout,
+    QGroupBox,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -58,6 +60,8 @@ from PySide6.QtWidgets import (
     QListWidgetItem,
     QMainWindow,
     QMenu,
+    QSpinBox,
+    QTabWidget,
     QMessageBox,
     QPushButton,
     QSlider,
@@ -68,6 +72,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
     QPlainTextEdit,
+    QTextEdit,
 )
 
 try:
@@ -557,7 +562,7 @@ class GlobalBackgroundDialog(QDialog):
         # Opacity 1.0 -> Alpha 0.0 (Clear)
         # Opacity 0.0 -> Alpha 1.0 (Solid White)
         alpha = 1.0 - opacity
-        
+
         # We also enforce white background on body/section to ensure consistency
         css = (
             "body, .marpit {\n"
@@ -572,6 +577,129 @@ class GlobalBackgroundDialog(QDialog):
             "}"
         )
         return css
+
+class GlobalHeaderFooterDialog(QDialog):
+    def __init__(self, parent: QWidget, base_path: Optional[Path] = None):
+        super().__init__(parent)
+        self.setWindowTitle("Set Global Header/Footer")
+        self.resize(600, 500)
+        self.base_path = base_path
+
+        layout = QVBoxLayout(self)
+
+        self.tabs = QTabWidget()
+        layout.addWidget(self.tabs)
+
+        # Header Tab
+        self.header_ui = self._create_tab_ui("Header")
+        self.tabs.addTab(self.header_ui['widget'], "Header")
+
+        # Footer Tab
+        self.footer_ui = self._create_tab_ui("Footer")
+        self.tabs.addTab(self.footer_ui['widget'], "Footer")
+
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+
+    def _create_tab_ui(self, label: str):
+        widget = QWidget()
+        lay = QVBoxLayout(widget)
+
+        # Text Content (Markdown)
+        lay.addWidget(QLabel(f"{label} Content (Markdown):"))
+        text_edit = QTextEdit()
+        text_edit.setPlaceholderText(f"Enter {label.lower()} text here. You can use markdown and images.")
+        lay.addWidget(text_edit, 1)
+
+        # Image Button
+        btn_img = QPushButton("Insert Image...")
+        btn_img.clicked.connect(lambda: self._insert_image(text_edit))
+        lay.addWidget(btn_img)
+
+        # Styling Group
+        grp = QGroupBox("Styling & Layout")
+        glay = QFormLayout(grp)
+
+        # Height
+        h_spin = QSpinBox()
+        h_spin.setRange(0, 500)
+        h_spin.setValue(100 if label == "Header" else 50)
+        h_spin.setSuffix(" px")
+        glay.addRow("Height:", h_spin)
+
+        # Offset (gap from edge)
+        off_spin = QSpinBox()
+        off_spin.setRange(-100, 300)
+        off_spin.setValue(0)
+        off_spin.setSuffix(" px")
+        glay.addRow("Edge Offset:", off_spin)
+
+        # Alignment
+        align_combo = QComboBox()
+        # Data: CSS property for text-align or special for spread
+        align_combo.addItem("Left", "left")
+        align_combo.addItem("Center", "center")
+        align_combo.addItem("Right", "right")
+        align_combo.addItem("Spread (Justify)", "spread")
+        align_combo.setCurrentIndex(0) # Default Left
+        glay.addRow("Alignment:", align_combo)
+
+        lay.addWidget(grp)
+
+        return {
+            'widget': widget,
+            'text': text_edit,
+            'height': h_spin,
+            'offset': off_spin,
+            'align': align_combo
+        }
+
+    def _insert_image(self, editor: QTextEdit):
+        start = str(self.base_path.parent) if (self.base_path and self.base_path.parent.exists()) else os.getcwd()
+        p, _ = QFileDialog.getOpenFileName(self, "Select Image", start, "Images (*.png *.jpg *.jpeg *.svg *.gif);;All files (*)")
+        if p:
+            try:
+                rel = os.path.relpath(p, os.getcwd())
+                # Quote path if spaces
+                if " " in rel:
+                    rel = f"'{rel}'"
+                # Insert standard Marp image syntax
+                # Typically ![h:50](path)
+                editor.insertPlainText(f"![h:50]({rel}) ")
+            except ValueError:
+                pass
+
+    def get_settings(self):
+        return {
+            'header': self._get_tab_data(self.header_ui),
+            'footer': self._get_tab_data(self.footer_ui)
+        }
+
+    def _get_tab_data(self, ui):
+        return {
+            'content': ui['text'].toPlainText(),
+            'height': ui['height'].value(),
+            'offset': ui['offset'].value(),
+            'align': ui['align'].currentData()
+        }
+
+    def load_settings(self, data: dict):
+        if 'header' in data:
+            self._set_tab_data(self.header_ui, data['header'])
+        if 'footer' in data:
+            self._set_tab_data(self.footer_ui, data['footer'])
+
+    def _set_tab_data(self, ui, d):
+        ui['text'].setPlainText(d.get('content', ''))
+        ui['height'].setValue(int(d.get('height', 100)))
+        ui['offset'].setValue(int(d.get('offset', 0)))
+
+        al = d.get('align', 'left')
+        idx = ui['align'].findData(al)
+        if idx >= 0:
+            ui['align'].setCurrentIndex(idx)
 
 
 class MainWindow(QMainWindow):
@@ -745,6 +873,7 @@ class MainWindow(QMainWindow):
         img_menu.addAction("Insert Picture (absolute)…", self.insert_picture_dialog)
         img_menu.addSeparator()
         img_menu.addAction("Set global background (via CSS)…", self.set_global_background)
+        img_menu.addAction("Set global header/footer…", self.set_global_header_footer)
         img_btn.setMenu(img_menu)
         fmt_tb.addSeparator()
         fmt_tb.addWidget(img_btn)
@@ -1150,7 +1279,8 @@ class MainWindow(QMainWindow):
                     # End of block
                     break
 
-        style_block = "\n".join(style_block_lines)
+        import textwrap
+        style_block = textwrap.dedent("\n".join(style_block_lines))
         existing_found = False
 
         if style_block:
@@ -1168,12 +1298,12 @@ class MainWindow(QMainWindow):
                     size = m_size.group(1).strip() if m_size else "cover"
                     m_op = re.search(r"opacity:\s*([\d.]+)", style_block)
                     op = float(m_op.group(1)) if m_op else 1.0
-                    
+
                     dlg.load_settings(url, size, op, "center center")
                     m_pos = re.search(r"background-position:\s*([^;]+)", style_block)
                     if m_pos:
                         dlg.load_settings(url, size, op, m_pos.group(1).strip())
-            
+
             elif "linear-gradient" in style_block:
                 existing_found = True
                 # Parse New Gradient style
@@ -1183,13 +1313,13 @@ class MainWindow(QMainWindow):
                     url = m_url.group(1).replace("%22", '"').replace("%27", "'")
                     m_size = re.search(r"background-size:\s*([^;]+)", style_block)
                     size = m_size.group(1).strip() if m_size else "cover"
-                    
+
                     # Opacity is stuck in rgba(..., alpha)
                     # We look for the first rgba(... alpha)
                     m_alpha = re.search(r"rgba\(255,\s*255,\s*255,\s*([\d.]+)\)", style_block)
                     alpha = float(m_alpha.group(1)) if m_alpha else 0.0
                     op = 1.0 - alpha
-                    
+
                     dlg.load_settings(url, size, op, "center center")
                     m_pos = re.search(r"background-position:\s*([^;]+)", style_block)
                     if m_pos:
@@ -1260,6 +1390,191 @@ class MainWindow(QMainWindow):
 
             self._update_window_title()
             self._update_status("Global background updated.")
+            self._schedule_preview()
+
+
+    def set_global_header_footer(self):
+        if not self.deck.file_path:
+            QMessageBox.warning(self, "Save first", "Please save the deck first so we can resolve relative paths.")
+            return
+
+        dlg = GlobalHeaderFooterDialog(self, base_path=self.deck.file_path)
+
+        # Parse existing header/footer
+        pre = self.deck.preamble or "---\n\n---\n\n"
+
+        # 1. Extract header/footer strings
+        header_content = ""
+        footer_content = ""
+        m_head = re.search(r"^header:\s*(.*)$", pre, re.MULTILINE)
+        if m_head:
+            header_content = m_head.group(1).strip().strip("'\"")
+        m_foot = re.search(r"^footer:\s*(.*)$", pre, re.MULTILINE)
+        if m_foot:
+            footer_content = m_foot.group(1).strip().strip("'\"")
+
+        # 2. Extract CSS for header/footer
+        # We look for the style block again
+        style_block_lines = []
+        in_style = False
+        lines = pre.strip().split("\n")
+
+        # Helper to dedent block
+        import textwrap
+
+        for line in lines:
+            if re.match(r"^style\s*:", line):
+                in_style = True
+                continue
+            if in_style:
+                if line.strip() == "" or line.startswith(" ") or line.startswith("\t"):
+                    style_block_lines.append(line)
+                else:
+                    break
+
+        # Join then dedent to normalize
+        # Note: preserve empty lines
+        raw_block = "\n".join(style_block_lines)
+        style_block = textwrap.dedent(raw_block)
+
+        # Helpers to extract CSS props
+        def extract_css(selector, prop, default):
+            # Regex for "selector { ... prop: val; ... }"
+            # Simplified: look for "selector {" then scan for prop
+            m_sel = re.search(rf"{selector}\s*\{{([^}}]*)\}}", style_block, re.DOTALL)
+            if m_sel:
+                block_content = m_sel.group(1)
+                m_prop = re.search(rf"{prop}:\s*([^;]+)", block_content)
+                if m_prop:
+                    val = m_prop.group(1).strip()
+                    # clean "px"
+                    if val.endswith("px"):
+                        return int(val[:-2])
+                    return val
+            return default
+
+        # Header CSS
+        h_height = extract_css("header", "height", 100)
+        h_top = extract_css("header", "top", 0)
+        if isinstance(h_top, str): h_top = 0 # Safety
+
+        # Header Align
+        # Check text-align first
+        h_align = extract_css("header", "text-align", "left")
+        # Check if spread (display: flex)
+        h_display = extract_css("header", "display", "")
+        if "flex" in str(h_display):
+             h_align = "spread"
+
+        # Footer CSS
+        f_height = extract_css("footer", "height", 50)
+        f_bottom = extract_css("footer", "bottom", 0)
+        if isinstance(f_bottom, str): f_bottom = 0
+
+        f_align = extract_css("footer", "text-align", "left")
+        f_display = extract_css("footer", "display", "")
+        if "flex" in str(f_display):
+             f_align = "spread"
+
+        dlg.load_settings({
+            'header': {'content': header_content, 'height': h_height, 'offset': h_top, 'align': h_align},
+            'footer': {'content': footer_content, 'height': f_height, 'offset': f_bottom, 'align': f_align}
+        })
+
+        if dlg.exec():
+            data = dlg.get_settings()
+
+            # Reconstruct Preamble
+
+            # Remove existing header/footer keys
+            existing_lines = pre.strip().split("\n")
+            if existing_lines and existing_lines[0] == "---": existing_lines.pop(0)
+            if existing_lines and existing_lines[-1] == "---": existing_lines.pop()
+
+            # Filter out header/footer/style
+
+            # Let's rebuild the style block
+            # Retrieve existing style content MINUS header/footer rules
+
+            clean_style_block = style_block
+            # Remove entire header { ... } block
+            clean_style_block = re.sub(r"header\s*\{[^}]*\}", "", clean_style_block)
+            clean_style_block = re.sub(r"footer\s*\{[^}]*\}", "", clean_style_block)
+            clean_style_block = "\n".join([l for l in clean_style_block.split("\n") if l.strip()])
+
+            # Generate new CSS for header/footer
+            def gen_css(sel, d, is_top=True):
+                css = f"{sel} {{\n"
+                css += f"  height: {d['height']}px;\n"
+                if d['align'] == 'spread':
+                    css += "  display: flex;\n"
+                    css += "  justify-content: space-between;\n"
+                    css += "  align-items: center;\n"
+                    css += "  text-align: left;\n" # fallback
+                else:
+                    css += f"  text-align: {d['align']};\n"
+                    css += "  display: block;\n" # reset
+
+                # Position
+                if d['offset'] != 0:
+                    prop = "top" if is_top else "bottom"
+                    css += f"  {prop}: {d['offset']}px;\n"
+                else:
+                    # Explicit reset if user sets 0 but maybe was not 0 before?
+                    # Good practice to set 0 if 0
+                    pass
+
+                css += "}\n"
+                return css
+
+            new_css = ""
+            if data['header']['content']:
+                new_css += gen_css("header", data['header'], True)
+            if data['footer']['content']:
+                new_css += gen_css("footer", data['footer'], False)
+
+            final_style_block = clean_style_block + "\n" + new_css
+
+            # Parse lines to keep (non-header/footer/style)
+            final_lines = ["---"]
+
+            skip_indent = False
+            for line in existing_lines:
+                if re.match(r"^(header|footer)\s*:", line):
+                    continue
+                if re.match(r"^style\s*:", line):
+                    skip_indent = True
+                    continue
+                if skip_indent:
+                    if line.strip() == "" or line.startswith(" ") or line.startswith("\t"):
+                        continue
+                    else:
+                        skip_indent = False
+
+                final_lines.append(line)
+
+            # Append new keys
+            if data['header']['content']:
+                c = data['header']['content'].replace('"', '\\"')
+                final_lines.append(f'header: "{c}"')
+            if data['footer']['content']:
+                c = data['footer']['content'].replace('"', '\\"')
+                final_lines.append(f'footer: "{c}"')
+
+            # Append Style
+            if final_style_block.strip():
+                final_lines.append("style: |")
+                for l in final_style_block.split("\n"):
+                    if l.strip():
+                        final_lines.append(f"  {l}")
+
+            final_lines.append("---")
+
+            self.deck.preamble = "\n".join(final_lines) + "\n\n"
+            self.deck.dirty = True
+
+            self._update_window_title()
+            self._update_status("Global header/footer updated.")
             self._schedule_preview()
 
 

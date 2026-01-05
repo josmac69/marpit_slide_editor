@@ -816,7 +816,9 @@ class MainWindow(QMainWindow):
 
     # ---------------- UI ----------------
     def _build_ui(self):
-        # Main toolbars
+        # ---------------------------------------------------------
+        # 1. FILE TOOLBAR
+        # ---------------------------------------------------------
         file_tb = QToolBar("File")
         file_tb.setIconSize(QSize(16, 16))
         self.addToolBar(file_tb)
@@ -843,9 +845,9 @@ class MainWindow(QMainWindow):
 
         file_tb.addSeparator()
 
-        act_directives = QAction("Deck directives…", self)
-        act_directives.triggered.connect(self.edit_deck_directives)
-        file_tb.addAction(act_directives)
+        act_export = QAction("Generate slides…", self)
+        act_export.triggered.connect(self.export_deck)
+        file_tb.addAction(act_export)
 
         file_tb.addSeparator()
 
@@ -855,25 +857,76 @@ class MainWindow(QMainWindow):
         self.act_allow_local.triggered.connect(self._toggle_allow_local_files)
         file_tb.addAction(self.act_allow_local)
 
-        file_tb.addSeparator()
+        # ---------------------------------------------------------
+        # 2. DECK TOOLBAR (Global Settings)
+        # ---------------------------------------------------------
+        deck_tb = QToolBar("Deck")
+        deck_tb.setIconSize(QSize(16, 16))
+        self.addToolBar(deck_tb)
 
-        act_export = QAction("Generate slides…", self)
-        act_export.triggered.connect(self.export_deck)
-        file_tb.addAction(act_export)
+        deck_btn = QToolButton()
+        deck_btn.setText("Deck ▾")
+        deck_btn.setPopupMode(QToolButton.InstantPopup)
+        deck_menu = QMenu(deck_btn)
 
-        # Slide actions toolbar
-        slide_tb = QToolBar("Slides")
+        # Global Settings
+        deck_menu.addAction("Set global background...", self.set_global_background)
+        deck_menu.addAction("Set global header/footer...", self.set_global_header_footer)
+        deck_menu.addAction("Edit Front-matter (YAML)...", self.edit_deck_directives)
+        deck_menu.addSeparator()
+
+        # Themes
+        themes_menu = deck_menu.addMenu("Themes")
+        themes_menu.addAction("Default", lambda: self.insert_template("theme: default\n"))
+        themes_menu.addAction("Gaia", lambda: self.insert_template("theme: gaia\n"))
+        themes_menu.addAction("Uncover", lambda: self.insert_template("theme: uncover\n"))
+
+        deck_btn.setMenu(deck_menu)
+        deck_tb.addWidget(deck_btn)
+
+        # ---------------------------------------------------------
+        # 3. SLIDE TOOLBAR (Slide Management & Local Style)
+        # ---------------------------------------------------------
+        slide_tb = QToolBar("Slide")
         self.addToolBar(slide_tb)
 
-        act_add = QAction("Add slide after", self)
+        act_add = QAction("Add Slide", self)
         act_add.setShortcut(QKeySequence("Ctrl+Shift+N"))
         act_add.triggered.connect(self.add_slide_after_current)
         slide_tb.addAction(act_add)
 
-        act_del = QAction("Delete slide", self)
+        act_del = QAction("Delete Slide", self)
         act_del.setShortcut(QKeySequence("Ctrl+Shift+Del"))
         act_del.triggered.connect(self.delete_current_slide)
         slide_tb.addAction(act_del)
+
+        slide_tb.addSeparator()
+
+        slide_btn = QToolButton()
+        slide_btn.setText("Slide Options ▾")
+        slide_btn.setPopupMode(QToolButton.InstantPopup)
+        slide_menu = QMenu(slide_btn)
+
+        # Backgrounds
+        bg_menu = slide_menu.addMenu("Background Image")
+        bg_menu.addAction("Image", lambda: self.insert_template("![bg](path-or-url)\n"))
+        bg_menu.addAction("Image (Cover)", lambda: self.insert_template("![bg cover](path-or-url)\n"))
+        bg_menu.addAction("Image (Contain)", lambda: self.insert_template("![bg contain](path-or-url)\n"))
+        bg_menu.addSeparator()
+        bg_menu.addAction("Split Left", lambda: self.insert_template("![bg left](path-or-url)\n\n"))
+        bg_menu.addAction("Split Right", lambda: self.insert_template("![bg right](path-or-url)\n\n"))
+
+        # Styles
+        style_menu = slide_menu.addMenu("Slide Style")
+        style_menu.addAction("Lead (Centered)", lambda: self.insert_template("<!-- _class: lead -->\n"))
+        style_menu.addAction("Invert (Dark)", lambda: self.insert_template("<!-- _class: invert -->\n"))
+
+        slide_btn.setMenu(slide_menu)
+        slide_tb.addWidget(slide_btn)
+
+        # ---------------------------------------------------------
+        # 4. FORMATTING TOOLBAR (Text & Content)
+        # ---------------------------------------------------------
 
         # Central layout: left half (deck overview + editor) and right half (preview)
         self.root_split = QSplitter(Qt.Horizontal)
@@ -909,62 +962,32 @@ class MainWindow(QMainWindow):
         fmt_tb.setIconSize(QSize(16, 16))
         editor_layout.addWidget(fmt_tb)
 
-        # Basic line styles (CommonMark)
-        fmt_tb.addAction(self._make_action("Title (#)", lambda: self.set_line_heading(1)))
-        fmt_tb.addAction(self._make_action("Subtitle (##)", lambda: self.set_line_heading(2)))
-        fmt_tb.addAction(self._make_action("Heading (###)", lambda: self.set_line_heading(3)))
+        # Text Formatting
+        fmt_tb.addAction(self._make_action("H1", lambda: self.set_line_heading(1)))
+        fmt_tb.addAction(self._make_action("H2", lambda: self.set_line_heading(2)))
+        fmt_tb.addAction(self._make_action("H3", lambda: self.set_line_heading(3)))
         fmt_tb.addSeparator()
-        fmt_tb.addAction(self._make_action("Bullet (-)", lambda: self.set_line_list("-")))
-        fmt_tb.addAction(self._make_action("Fragment bullet (*)", lambda: self.set_line_list("*")))
-        fmt_tb.addAction(self._make_action("Numbered (1.)", self.set_line_numbered))
+        fmt_tb.addAction(self._make_action("List", lambda: self.set_line_list("-")))
+        fmt_tb.addAction(self._make_action("Num", self.set_line_numbered))
         fmt_tb.addSeparator()
-        fmt_tb.addAction(self._make_action("Quote (>)", self.set_line_quote))
-        fmt_tb.addAction(self._make_action("Code block", self.insert_code_block))
 
-        # Image / background menu
-        img_btn = QToolButton()
-        img_btn.setText("Images ▾")
-        img_btn.setPopupMode(QToolButton.InstantPopup)
-        img_menu = QMenu(img_btn)
-        img_menu.addAction("Inline image", lambda: self.insert_template("![](path-or-url)\n"))
-        img_menu.addAction("Inline image (width)", lambda: self.insert_template("![width:200px](path-or-url)\n"))
-        img_menu.addAction("Background image", lambda: self.insert_template("![bg](path-or-url)\n"))
-        img_menu.addAction("Background (contain)", lambda: self.insert_template("![bg contain](path-or-url)\n"))
-        img_menu.addAction("Background (cover)", lambda: self.insert_template("![bg cover](path-or-url)\n"))
-        img_menu.addAction("Split background (left)", lambda: self.insert_template("![bg left](path-or-url)\n\n"))
-        img_menu.addAction("Split background (right)", lambda: self.insert_template("![bg right](path-or-url)\n\n"))
-        img_menu.addAction("Split background (left:33%)", lambda: self.insert_template("![bg left:33%](path-or-url)\n\n"))
-        img_menu.addSeparator()
-        img_menu.addAction("Insert Picture (absolute)…", self.insert_picture_dialog)
-        img_menu.addSeparator()
-        img_menu.addAction("Set global background (via CSS)…", self.set_global_background)
-        img_menu.addAction("Set global header/footer…", self.set_global_header_footer)
-        img_btn.setMenu(img_menu)
-        fmt_tb.addSeparator()
-        fmt_tb.addWidget(img_btn)
+        # Insert Menu
+        ins_btn = QToolButton()
+        ins_btn.setText("Insert ▾")
+        ins_btn.setPopupMode(QToolButton.InstantPopup)
+        ins_menu = QMenu(ins_btn)
 
-        # Directives menu (Marpit)
-        dir_btn = QToolButton()
-        dir_btn.setText("Directives ▾")
-        dir_btn.setPopupMode(QToolButton.InstantPopup)
-        dir_menu = QMenu(dir_btn)
-        dir_menu.addAction("Slide class: lead", lambda: self.insert_template("<!-- _class: lead -->\n"))
-        dir_menu.addAction("Slide class: invert", lambda: self.insert_template("<!-- _class: invert -->\n"))
-        dir_menu.addSeparator()
-        dir_menu.addAction("Background color", lambda: self.insert_template("<!-- _backgroundColor: #ffffff -->\n"))
-        dir_menu.addAction("Text color", lambda: self.insert_template("<!-- _color: #000000 -->\n"))
-        dir_menu.addSeparator()
-        dir_menu.addAction("Paginate: true", lambda: self.insert_template("<!-- paginate: true -->\n"))
-        dir_menu.addAction("Paginate: hold (show, don't increment)", lambda: self.insert_template("<!-- _paginate: hold -->\n"))
-        dir_menu.addAction("Paginate: skip (hide, don't increment)", lambda: self.insert_template("<!-- _paginate: skip -->\n"))
-        dir_menu.addSeparator()
-        dir_menu.addAction("Header", lambda: self.insert_template("<!-- header: \"\" -->\n"))
-        dir_menu.addAction("Footer", lambda: self.insert_template("<!-- footer: \"\" -->\n"))
-        dir_btn.setMenu(dir_menu)
-        fmt_tb.addWidget(dir_btn)
+        ins_menu.addAction("Insert Picture...", self.insert_picture_dialog)
+        ins_menu.addSeparator()
+        ins_menu.addAction("Inline Image", lambda: self.insert_template("![](path-or-url)\n"))
+        ins_menu.addAction("Quote", self.set_line_quote)
+        ins_menu.addAction("Code Block", self.insert_code_block)
+        ins_menu.addAction("Presenter Note", self.insert_presenter_note)
+        ins_menu.addSeparator()
+        ins_menu.addAction("New Slide (Separator)", lambda: self.insert_template("\n---\n\n"))
 
-        fmt_tb.addSeparator()
-        fmt_tb.addAction(self._make_action("Presenter note", self.insert_presenter_note))
+        ins_btn.setMenu(ins_menu)
+        fmt_tb.addWidget(ins_btn)
 
         self.editor = QPlainTextEdit()
         self.editor.setFont(mono)

@@ -434,6 +434,78 @@ class InsertImageDialog(QDialog):
         return f'<img src="{src}" style="{style}" />'
 
 
+class GlobalBackgroundDialog(QDialog):
+    def __init__(self, parent: QWidget, base_path: Optional[Path] = None):
+        super().__init__(parent)
+        self.setWindowTitle("Set Global Background Image")
+        self.setModal(True)
+        self.resize(500, 200)
+        self.base_path = base_path
+
+        layout = QVBoxLayout(self)
+
+        # File selection
+        row1 = QHBoxLayout()
+        row1.addWidget(QLabel("Image Path:"))
+        self.path_edit = QLineEdit()
+        row1.addWidget(self.path_edit, 1)
+        browse = QPushButton("Browse…")
+        browse.clicked.connect(self._browse)
+        row1.addWidget(browse)
+        layout.addLayout(row1)
+
+        # Size mode
+        row2 = QHBoxLayout()
+        row2.addWidget(QLabel("Size Mode:"))
+        self.size_combo = QComboBox()
+        self.size_combo.addItem("Cover (fill slide)", "cover")
+        self.size_combo.addItem("Contain (fit inside)", "contain")
+        self.size_combo.addItem("Original size", "auto")
+        self.size_combo.addItem("Stretch (100% 100%)", "100% 100%")
+        row2.addWidget(self.size_combo, 1)
+        layout.addLayout(row2)
+
+        info = QLabel("This will add a 'style' block to the YAML front-matter, applying to ALL slides.")
+        info.setStyleSheet("color: gray; font-style: italic;")
+        layout.addWidget(info)
+
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+
+    def _browse(self):
+        start = str(self.base_path.parent) if (self.base_path and self.base_path.parent.exists()) else os.getcwd()
+        p, _ = QFileDialog.getOpenFileName(self, "Select Image", start, "Images (*.png *.jpg *.jpeg *.svg *.gif);;All files (*)")
+        if p:
+            try:
+                rel = os.path.relpath(p, os.getcwd())
+                p = rel
+            except ValueError:
+                pass
+            self.path_edit.setText(p)
+
+    def get_css_content(self) -> str:
+        src = self.path_edit.text().strip()
+        if not src:
+            return ""
+
+        mode = self.size_combo.currentData()
+
+        # Minimal escape:
+        src_escaped = src.replace('"', '%22').replace("'", '%27')
+
+        css = (
+            "section {\n"
+            f"  background-image: url('{src_escaped}');\n"
+            "  background-repeat: no-repeat;\n"
+            "  background-position: center center;\n"
+            f"  background-size: {mode};\n"
+            "}"
+        )
+        return css
+
+
 class MainWindow(QMainWindow):
     def __init__(self, initial_file: Optional[Path] = None, launch_cwd: Optional[Path] = None):
         super().__init__()
@@ -603,6 +675,8 @@ class MainWindow(QMainWindow):
         img_menu.addAction("Split background (left:33%)", lambda: self.insert_template("![bg left:33%](path-or-url)\n\n"))
         img_menu.addSeparator()
         img_menu.addAction("Insert Picture (absolute)…", self.insert_picture_dialog)
+        img_menu.addSeparator()
+        img_menu.addAction("Set global background (via CSS)…", self.set_global_background)
         img_btn.setMenu(img_menu)
         fmt_tb.addSeparator()
         fmt_tb.addWidget(img_btn)
@@ -977,6 +1051,60 @@ class MainWindow(QMainWindow):
         if dlg.exec():
             html_tag = dlg.get_html_tag()
             self.insert_template(html_tag)
+
+    def set_global_background(self):
+        if not self.deck.file_path:
+            QMessageBox.warning(self, "Save first", "Please save the deck first so we can resolve relative paths.")
+            return
+
+        dlg = GlobalBackgroundDialog(self, base_path=self.deck.file_path)
+        if dlg.exec():
+            css = dlg.get_css_content()
+            if not css:
+                return
+
+            # Check if preamble already has 'style:' block
+            pre = self.deck.preamble or "---\n\n---\n\n"
+
+            # Simple check for existing 'style:' key in YAML
+            # We don't have full YAML parser here, so we do a simple regex check.
+            if re.search(r"^style\s*:", pre, re.MULTILINE):
+                # Existing style block found - too risky to overwrite automatically without parsing.
+                # Let the user handle it via the Directives editor.
+                QMessageBox.information(
+                    self,
+                    "Existing Global Styles",
+                    "Your deck already contains a 'style' block in the YAML front-matter.\n\n"
+                    "Please paste the generated CSS manually into the 'style' section."
+                )
+
+                # Copy css to clipboard
+                QApplication.clipboard().setText(css)
+
+                # Open directives editor
+                self.edit_deck_directives()
+                return
+
+            # Inject 'style: | ...' into the front matter
+            # We assume front matter ends with '---'
+            lines = pre.strip().split("\n")
+            if len(lines) >= 2 and lines[0].strip() == "---" and lines[-1].strip() == "---":
+                # Remove last '---'
+                lines.pop()
+                # Add style block
+                lines.append("style: |")
+                for css_line in css.split("\n"):
+                    lines.append(f"  {css_line}")
+                lines.append("---")
+
+                self.deck.preamble = "\n".join(lines) + "\n\n"
+                self.deck.dirty = True
+
+                self._update_window_title()
+                self._update_status("Global background set (YAML).")
+                self._schedule_preview()
+            else:
+                QMessageBox.warning(self, "Error", "Could not parse YAML front-matter automatically.")
 
 
     # ---------------- Preview rendering ----------------

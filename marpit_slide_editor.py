@@ -792,6 +792,7 @@ class MainWindow(QMainWindow):
         self._last_preview_hash = ""
 
         self.allow_local_files = True
+        self.recent_files: List[str] = []
 
         self._build_ui()
 
@@ -832,6 +833,14 @@ class MainWindow(QMainWindow):
         act_open.setShortcut(QKeySequence.Open)
         act_open.triggered.connect(self.open_deck)
         file_tb.addAction(act_open)
+
+        # Open Recent
+        self.btn_recent = QToolButton()
+        self.btn_recent.setText("Open Recent ▾")
+        self.btn_recent.setPopupMode(QToolButton.InstantPopup)
+        self.menu_recent = QMenu(self.btn_recent)
+        self.btn_recent.setMenu(self.menu_recent)
+        file_tb.addWidget(self.btn_recent)
 
         act_save = QAction("Save", self)
         act_save.setShortcut(QKeySequence.Save)
@@ -1181,6 +1190,7 @@ class MainWindow(QMainWindow):
 
         self._update_window_title()
         self._update_status("Deck loaded.")
+        self._add_recent_file(p)
         self._schedule_preview()
 
     def save_deck(self):
@@ -1200,6 +1210,7 @@ class MainWindow(QMainWindow):
             self.deck.file_path = p
             self._update_window_title()
             self._update_status("Saved.")
+            self._add_recent_file(p)
             self._schedule_preview()
         return ok
 
@@ -1221,6 +1232,7 @@ class MainWindow(QMainWindow):
 
         self._update_window_title()
         self._update_status("Saved.")
+        self._add_recent_file(path)
         return True
 
     def add_slide_after_current(self):
@@ -1877,6 +1889,7 @@ class MainWindow(QMainWindow):
     def _load_config(self):
         cfg_path = self._get_config_path()
         if not cfg_path.exists():
+            self._update_recent_menu() # init empty
             return
 
         try:
@@ -1889,6 +1902,12 @@ class MainWindow(QMainWindow):
             sizes = data.get("splitter_sizes")
             if sizes and isinstance(sizes, list) and len(sizes) == 2:
                 self.root_split.setSizes(sizes)
+
+            # Load recent files
+            self.recent_files = data.get("recent_files", [])
+            # Filter non-existing files? Maybe not, network drives might be offline.
+            self._update_recent_menu()
+
         except Exception:
             pass # Ignore config errors
 
@@ -1897,12 +1916,58 @@ class MainWindow(QMainWindow):
         data = {
             "window_width": self.width(),
             "window_height": self.height(),
-            "splitter_sizes": self.root_split.sizes()
+            "splitter_sizes": self.root_split.sizes(),
+            "recent_files": self.recent_files
         }
         try:
             cfg_path.write_text(json.dumps(data, indent=2), encoding="utf-8")
         except Exception:
             pass
+
+    def _add_recent_file(self, path: Path):
+        p_str = str(path.resolve())
+        # Remove if exists
+        if p_str in self.recent_files:
+            self.recent_files.remove(p_str)
+        # Add to top
+        self.recent_files.insert(0, p_str)
+        # Cap at 10
+        self.recent_files = self.recent_files[:10]
+        self._update_recent_menu()
+        self._save_config()
+
+    def _update_recent_menu(self):
+        self.menu_recent.clear()
+        if not self.recent_files:
+            act = QAction("No recent files", self)
+            act.setEnabled(False)
+            self.menu_recent.addAction(act)
+            return
+
+        for fpath in self.recent_files:
+             # Use path as text (checking if valid?)
+             # Truncate if too long?
+             fname = Path(fpath).name
+             # Show name, toolip full path
+             # Or show full path if ambiguous?
+             # Let's show "Name (Path)" or just Path
+             # Path is clearer for now
+             act = QAction(fname, self)
+             act.setToolTip(fpath)
+             act.setData(fpath)
+             # Use lambda with default arg to capture fpath properly
+             act.triggered.connect(lambda checked=False, p=fpath: self.load_from_path(Path(p)))
+             self.menu_recent.addAction(act)
+
+        self.menu_recent.addSeparator()
+        act_clear = QAction("Clear recent files", self)
+        act_clear.triggered.connect(self._clear_recent)
+        self.menu_recent.addAction(act_clear)
+
+    def _clear_recent(self):
+        self.recent_files = []
+        self._update_recent_menu()
+        self._save_config()
 
     # ---------------- Close handling ----------------
     def _confirm_discard_if_dirty(self) -> bool:

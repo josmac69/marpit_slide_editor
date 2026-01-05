@@ -465,6 +465,20 @@ class GlobalBackgroundDialog(QDialog):
         self.size_combo.addItem("Original size", "auto")
         self.size_combo.addItem("Stretch (100% 100%)", "100% 100%")
         row2.addWidget(self.size_combo, 1)
+
+        # Position
+        self.pos_combo = QComboBox()
+        positions = [
+            "center center", "top left", "top center", "top right",
+            "bottom left", "bottom center", "bottom right",
+            "center left", "center right"
+        ]
+        for p in positions:
+            self.pos_combo.addItem(p, p)
+
+        row2.addWidget(QLabel("Position:"))
+        row2.addWidget(self.pos_combo, 1)
+        layout.addLayout(row2)
         # Opacity
         row3 = QHBoxLayout()
         row3.addWidget(QLabel("Opacity:"))
@@ -515,15 +529,15 @@ class GlobalBackgroundDialog(QDialog):
                 pass
             self.path_edit.setText(p)
 
-    def load_settings(self, src: str, mode: str, opacity: float):
+    def load_settings(self, src: str, mode: str, opacity: float, position: str = "center center"):
         self.path_edit.setText(src)
+
         idx = self.size_combo.findData(mode)
-        if idx >= 0:
-            self.size_combo.setCurrentIndex(idx)
-        else:
-            # Maybe it's a raw value not in our list, try to find text match or add it?
-            # For now just default to cover if unknown
-            pass
+        if idx >= 0: self.size_combo.setCurrentIndex(idx)
+
+        idx_pos = self.pos_combo.findData(position)
+        if idx_pos >= 0: self.pos_combo.setCurrentIndex(idx_pos)
+
         self.opacity_spin.setValue(opacity)
 
     def get_css_content(self) -> str:
@@ -532,13 +546,18 @@ class GlobalBackgroundDialog(QDialog):
             return ""
 
         mode = self.size_combo.currentData()
+        pos = self.pos_combo.currentData()
         opacity = self.opacity_spin.value()
 
         # Minimal escape:
         src_escaped = src.replace('"', '%22').replace("'", '%27')
 
         # To support opacity on background image only (not text), we use ::before
+        # Also ensure container background is white so transparency fades to white, not black
         css = (
+            "body, .marpit {\n"
+            "  background-color: white !important;\n"
+            "}\n"
             "section {\n"
             "  background-color: transparent !important;\n"
             "}\n"
@@ -548,7 +567,7 @@ class GlobalBackgroundDialog(QDialog):
             "  top: 0; left: 0; right: 0; bottom: 0;\n"
             f"  background-image: url('{src_escaped}');\n"
             "  background-repeat: no-repeat;\n"
-            "  background-position: center center;\n"
+            f"  background-position: {pos};\n"
             f"  background-size: {mode};\n"
             f"  opacity: {opacity};\n"
             "  z-index: -1;\n"
@@ -1108,11 +1127,7 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "Save first", "Please save the deck first so we can resolve relative paths.")
             return
 
-        dlg = GlobalBackgroundDialog(self, base_path=self.deck.file_path)
-        if dlg.exec():
-            css = dlg.get_css_content()
-            if not css:
-                return
+
 
         dlg = GlobalBackgroundDialog(self, base_path=self.deck.file_path)
 
@@ -1162,7 +1177,12 @@ class MainWindow(QMainWindow):
                     m_op = re.search(r"opacity:\s*([\d.]+)", style_block)
                     op = float(m_op.group(1)) if m_op else 1.0
 
-                    dlg.load_settings(url, size, op)
+                    dlg.load_settings(url, size, op, "center center")
+
+                    # Extract Position
+                    m_pos = re.search(r"background-position:\s*([^;]+)", style_block)
+                    if m_pos:
+                        dlg.load_settings(url, size, op, m_pos.group(1).strip())
 
         if dlg.exec():
             css = dlg.get_css_content()

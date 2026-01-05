@@ -552,25 +552,23 @@ class GlobalBackgroundDialog(QDialog):
         # Minimal escape:
         src_escaped = src.replace('"', '%22').replace("'", '%27')
 
-        # To support opacity on background image only (not text), we use ::before
-        # Also ensure container background is white so transparency fades to white, not black
+        # Use linear-gradient overlay to simulate opacity (Fading to white)
+        # This is more robust than ::before + z-index which often fails in previews.
+        # Opacity 1.0 -> Alpha 0.0 (Clear)
+        # Opacity 0.0 -> Alpha 1.0 (Solid White)
+        alpha = 1.0 - opacity
+        
+        # We also enforce white background on body/section to ensure consistency
         css = (
             "body, .marpit {\n"
             "  background-color: white !important;\n"
             "}\n"
             "section {\n"
-            "  background-color: transparent !important;\n"
-            "}\n"
-            "section::before {\n"
-            "  content: \"\";\n"
-            "  position: absolute;\n"
-            "  top: 0; left: 0; right: 0; bottom: 0;\n"
-            f"  background-image: url('{src_escaped}');\n"
+            "  background-color: white !important;\n"
+            f"  background-image: linear-gradient(rgba(255,255,255,{alpha:.2f}), rgba(255,255,255,{alpha:.2f})), url('{src_escaped}');\n"
             "  background-repeat: no-repeat;\n"
             f"  background-position: {pos};\n"
             f"  background-size: {mode};\n"
-            f"  opacity: {opacity};\n"
-            "  z-index: -1;\n"
             "}"
         )
         return css
@@ -1159,27 +1157,40 @@ class MainWindow(QMainWindow):
             # Try to extract current values
             # Looking for url('...'), background-size: ..., opacity: ...
 
-            # Simple heuristic: if it contains section::before, we assume it's ours or compatible
+            # Check for legacy "section::before" style OR new "linear-gradient" style
             if "section::before" in style_block:
                 existing_found = True
-
-                # Extract URL
+                # Parse Legacy ::before
                 m_url = re.search(r"background-image:\s*url\(['\"](.*?)['\"]\)", style_block)
                 if m_url:
-                    # simplistic de-escape for now
                     url = m_url.group(1).replace("%22", '"').replace("%27", "'")
-
-                    # Extract Size
                     m_size = re.search(r"background-size:\s*([^;]+)", style_block)
                     size = m_size.group(1).strip() if m_size else "cover"
-
-                    # Extract Opacity
                     m_op = re.search(r"opacity:\s*([\d.]+)", style_block)
                     op = float(m_op.group(1)) if m_op else 1.0
-
+                    
                     dlg.load_settings(url, size, op, "center center")
-
-                    # Extract Position
+                    m_pos = re.search(r"background-position:\s*([^;]+)", style_block)
+                    if m_pos:
+                        dlg.load_settings(url, size, op, m_pos.group(1).strip())
+            
+            elif "linear-gradient" in style_block:
+                existing_found = True
+                # Parse New Gradient style
+                # background-image: linear-gradient(rgba(255,255,255,0.50), ...), url('...')
+                m_url = re.search(r"url\(['\"](.*?)['\"]\)", style_block)
+                if m_url:
+                    url = m_url.group(1).replace("%22", '"').replace("%27", "'")
+                    m_size = re.search(r"background-size:\s*([^;]+)", style_block)
+                    size = m_size.group(1).strip() if m_size else "cover"
+                    
+                    # Opacity is stuck in rgba(..., alpha)
+                    # We look for the first rgba(... alpha)
+                    m_alpha = re.search(r"rgba\(255,\s*255,\s*255,\s*([\d.]+)\)", style_block)
+                    alpha = float(m_alpha.group(1)) if m_alpha else 0.0
+                    op = 1.0 - alpha
+                    
+                    dlg.load_settings(url, size, op, "center center")
                     m_pos = re.search(r"background-position:\s*([^;]+)", style_block)
                     if m_pos:
                         dlg.load_settings(url, size, op, m_pos.group(1).strip())

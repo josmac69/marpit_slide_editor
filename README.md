@@ -59,3 +59,12 @@ You can also open a specific file directly:
 ```bash
 ./venv/bin/python marpit_slide_editor.py path/to/presentation.md
 ```
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## Credits
+
+- Original code created by **ChatGPT 5.2 Pro**.
+- All subsequent changes done in **Google Antigravity** using **Gemini 3 Pro**.

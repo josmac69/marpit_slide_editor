@@ -42,7 +42,7 @@ from pathlib import Path
 from typing import List, Optional, Tuple
 
 from PySide6.QtCore import Qt, QTimer, QUrl, QSize
-from PySide6.QtGui import QAction, QFont, QKeySequence, QTextCursor, QSyntaxHighlighter, QTextCharFormat, QColor
+from PySide6.QtGui import QAction, QFont, QKeySequence, QTextCursor, QSyntaxHighlighter, QTextCharFormat, QColor, QIcon
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
@@ -68,6 +68,7 @@ from PySide6.QtWidgets import (
     QSlider,
     QSplitter,
     QStatusBar,
+    QStyle,
     QToolBar,
     QToolButton,
     QVBoxLayout,
@@ -975,6 +976,38 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.setWindowTitle("Marpit Slide Editor")
         self.resize(1400, 850)
+        
+        # Application-wide StyleSheet for cleaner, larger buttons
+        self.setStyleSheet("""
+            QToolBar {
+                spacing: 6px;
+                padding: 6px;
+                background-color: #e0e0e0;
+                border-bottom: 1px solid #c0c0c0;
+            }
+            QToolButton {
+                background-color: #ffffff;
+                border: 2px solid #a0a0a0;
+                border-radius: 4px;
+                padding: 6px 12px;
+                min-height: 28px;
+                font-size: 14px;
+                font-weight: bold;
+                color: #333333;
+            }
+            QToolButton:hover {
+                background-color: #f0f8ff;
+                border: 2px solid #0078d7;
+            }
+            QToolButton:pressed {
+                background-color: #d0d0d0;
+                border: 2px solid #005a9e;
+            }
+            QToolButton::menu-indicator { 
+                image: none; 
+            }
+        """)
+
         self.launch_cwd = launch_cwd or Path.cwd()
 
         self.marp_cmd = find_marp_cli_command()
@@ -1027,15 +1060,20 @@ class MainWindow(QMainWindow):
         # 1. FILE TOOLBAR
         # ---------------------------------------------------------
         file_tb = QToolBar("File")
-        file_tb.setIconSize(QSize(16, 16))
+        file_tb.setIconSize(QSize(24, 24))
+        file_tb.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
         self.addToolBar(file_tb)
+        
+        style = self.style()
 
         act_new = QAction("New deck", self)
+        act_new.setIcon(style.standardIcon(QStyle.SP_FileIcon))
         act_new.setShortcut(QKeySequence.New)
         act_new.triggered.connect(self.new_deck)
         file_tb.addAction(act_new)
 
         act_open = QAction("Open…", self)
+        act_open.setIcon(style.standardIcon(QStyle.SP_DialogOpenButton))
         act_open.setShortcut(QKeySequence.Open)
         act_open.triggered.connect(self.open_deck)
         file_tb.addAction(act_open)
@@ -1049,6 +1087,7 @@ class MainWindow(QMainWindow):
         file_tb.addWidget(self.btn_recent)
 
         act_save = QAction("Save", self)
+        act_save.setIcon(style.standardIcon(QStyle.SP_DialogSaveButton))
         act_save.setShortcut(QKeySequence.Save)
         act_save.triggered.connect(self.save_deck)
         file_tb.addAction(act_save)
@@ -1093,7 +1132,8 @@ class MainWindow(QMainWindow):
         # 2. DECK TOOLBAR (Global Settings)
         # ---------------------------------------------------------
         deck_tb = QToolBar("Deck")
-        deck_tb.setIconSize(QSize(16, 16))
+        deck_tb.setIconSize(QSize(24, 24))
+        deck_tb.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
         self.addToolBar(deck_tb)
 
         deck_btn = QToolButton()
@@ -1121,14 +1161,20 @@ class MainWindow(QMainWindow):
         # 3. SLIDE TOOLBAR (Slide Management & Local Style)
         # ---------------------------------------------------------
         slide_tb = QToolBar("Slide")
+        slide_tb.setIconSize(QSize(24, 24))
+        slide_tb.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
         self.addToolBar(slide_tb)
 
-        act_add = QAction("Add Slide", self)
+        act_add = QAction("Add", self) # Shortened text for toolbar
+        act_add.setToolTip("Add Slide")
+        act_add.setIcon(style.standardIcon(QStyle.SP_FileDialogNewFolder)) # Best approx for "Add"
         act_add.setShortcut(QKeySequence("Ctrl+Shift+N"))
         act_add.triggered.connect(self.add_slide_after_current)
         slide_tb.addAction(act_add)
 
-        act_del = QAction("Delete Slide", self)
+        act_del = QAction("Delete", self)
+        act_del.setToolTip("Delete Slide")
+        act_del.setIcon(style.standardIcon(QStyle.SP_TrashIcon))
         act_del.setShortcut(QKeySequence("Ctrl+Shift+Del"))
         act_del.triggered.connect(self.delete_current_slide)
         slide_tb.addAction(act_del)
@@ -1192,16 +1238,17 @@ class MainWindow(QMainWindow):
         editor_layout.setSpacing(4)
 
         fmt_tb = QToolBar("Formatting")
-        fmt_tb.setIconSize(QSize(16, 16))
+        fmt_tb.setIconSize(QSize(24, 24))
+        fmt_tb.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
         editor_layout.addWidget(fmt_tb)
 
-        # Text Formatting
+        # Text Formatting (Using Emojis/Text as Icons)
         fmt_tb.addAction(self._make_action("H1", lambda: self.set_line_heading(1)))
         fmt_tb.addAction(self._make_action("H2", lambda: self.set_line_heading(2)))
         fmt_tb.addAction(self._make_action("H3", lambda: self.set_line_heading(3)))
         fmt_tb.addSeparator()
-        fmt_tb.addAction(self._make_action("List", lambda: self.set_line_list("-")))
-        fmt_tb.addAction(self._make_action("Num", self.set_line_numbered))
+        fmt_tb.addAction(self._make_action("📝 List", lambda: self.set_line_list("-")))
+        fmt_tb.addAction(self._make_action("🔢 Num", self.set_line_numbered))
         fmt_tb.addSeparator()
 
         # Insert Menu

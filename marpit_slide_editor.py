@@ -57,6 +57,7 @@ from PySide6.QtWidgets import (
     QGridLayout,
     QGroupBox,
     QHBoxLayout,
+    QInputDialog,
     QLabel,
     QLineEdit,
     QListWidget,
@@ -2972,22 +2973,112 @@ class MainWindow(QMainWindow):
         self.editor.setFocus()
 
     def open_visual_math_editor(self):
-        dlg = MathEditorDialog(self)
+        cursor = self.editor.textCursor()
+        
+        # 1. Check if user already selected something
+        selected_text = cursor.selectedText().strip()
+        
+        start_pos = -1
+        end_pos = -1
+        initial_content = ""
+        
+        is_edit_mode = False
+
+        # Helper detection regexes
+        # Inline: $...$ (non-greedy)
+        # Block: $$...$$ (non-greedy, including newlines)
+        # We search in the ENTIRE document text if no selection
+        doc_text = self.editor.toPlainText()
+        
+        # If selection looks like math, use it
+        if selected_text.startswith("$") and selected_text.endswith("$"):
+            # Strip outer $
+            initial_content = selected_text.strip("$").strip()
+            is_edit_mode = True
+            # Keep cursor selection as is to replace it later
+            
+        elif not selected_text:
+            # No selection: Scan for formulas
+            # We look for all occurrences of block math ($$...$$) and inline math ($...$)
+            # We want to find if the cursor is INSIDE one.
+            cursor_pos = cursor.position()
+            
+            # Simple regex parser for finding ranges
+            # Note: This is a robust-enough heuristic for common Marpit usage.
+            # We combine block and inline regex. order matters (block first).
+            math_pattern = re.compile(r'(\$\$(.+?)\$\$|\$(.+?)\$)', re.DOTALL)
+            
+            matches = list(math_pattern.finditer(doc_text))
+            
+            target_match = None
+            
+            if len(matches) == 1:
+                # Case: Only one formula in slide/file -> Auto-pick it
+                target_match = matches[0]
+            elif len(matches) > 1:
+                # Case: Multiple formulas
+                # 1. Check if cursor is inside one
+                for m in matches:
+                    if m.start() <= cursor_pos <= m.end():
+                        target_match = m
+                        break
+                
+                # 2. If not inside, Ask user
+                if not target_match:
+                    items = []
+                    for i, m in enumerate(matches):
+                        # Show snippet
+                        raw = m.group(0)
+                        snippet = raw.replace("\n", " ")
+                        if len(snippet) > 40: snippet = snippet[:40] + "..."
+                        items.append(f"{i+1}: {snippet}")
+                    
+                    item, ok = QInputDialog.getItem(self, "Select Formula", 
+                                                  "Multiple formulas found. Which one to edit?", 
+                                                  items, 0, False)
+                    if ok and item:
+                        idx = int(item.split(":")[0]) - 1
+                        target_match = matches[idx]
+                    else:
+                        # User cancelled or selected nothing, treat as new
+                        pass
+
+            if target_match:
+                # Extract inner content
+                # Group 0 is full match, Group 2 is block content, Group 3 is inline content
+                full_match = target_match.group(0)
+                if full_match.startswith("$$"):
+                    initial_content = target_match.group(2).strip()
+                else:
+                    initial_content = target_match.group(3).strip()
+                
+                # Select the range in editor so we can replace it
+                is_edit_mode = True
+                cursor.setPosition(target_match.start())
+                cursor.setPosition(target_match.end(), QTextCursor.KeepAnchor)
+                self.editor.setTextCursor(cursor)
+
+        # Open Dialog
+        dlg = MathEditorDialog(self, initial_text=initial_content)
         if dlg.exec() == QDialog.Accepted:
             latex = dlg.get_latex()
-            if not latex:
-                return
+            if not latex and is_edit_mode:
+                # If cleared content in edit mode, maybe delete? 
+                # For now let's just insert nothing (deleing the formula)
+                pass
             
+            if not latex and not is_edit_mode:
+                return
+
             # Decide if block or inline
+            # If we were editing, try to preserve type, OR infer from new content
             # Heuristic: if contains newlines, probably block
             if "\n" in latex or "\\begin" in latex:
-                # Block
                 text = f"\n$$\n{latex}\n$$\n"
             else:
-                # Inline
                 text = f"${latex}$"
                 
-            cursor = self.editor.textCursor()
+            # Replace selected text (if edit mode) or insert at cursor
             cursor.insertText(text)
             self.editor.setFocus()
 

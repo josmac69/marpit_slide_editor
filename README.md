@@ -9,6 +9,14 @@ A single-file GUI editor for Marpit / Marp slide decks, built with Python and Py
 - **Spell Check**: Automatic English spell checking (misspelled words underlined in red).
 - **Configurable Pagination**: Toggle page numbers and customize their font, size, color, and position via the 'Deck' menu.
 
+## Quick Start
+
+The easiest way to run the editor is using the included startup script, which handles environment creation and dependencies automatically:
+
+```bash
+./run_editor.sh
+```
+
 ## Dependencies
 
 ### Python Dependencies

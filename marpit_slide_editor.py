@@ -59,6 +59,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QInputDialog,
     QLabel,
+    QRadioButton,
     QLineEdit,
     QListWidget,
     QListWidgetItem,
@@ -392,12 +393,20 @@ class InsertImageDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle("Insert Picture")
         self.setModal(True)
-        self.resize(500, 300)
+        self.resize(550, 400)
         self.base_path = base_path
 
         layout = QVBoxLayout(self)
 
-        # File selection
+        # Tabs
+        self.tabs = QTabWidget()
+        layout.addWidget(self.tabs)
+
+        # --- Tab 1: Basic (Source & Dimensions) ---
+        tab_basic = QWidget()
+        l_basic = QVBoxLayout(tab_basic)
+        
+        # File path
         row1 = QHBoxLayout()
         row1.addWidget(QLabel("Image Path:"))
         self.path_edit = QLineEdit()
@@ -405,69 +414,242 @@ class InsertImageDialog(QDialog):
         browse = QPushButton("Browse…")
         browse.clicked.connect(self._browse)
         row1.addWidget(browse)
-        layout.addLayout(row1)
-
-        # Position
-        grp_pos = QWidget()
-        l_pos = QHBoxLayout(grp_pos)
-        l_pos.setContentsMargins(0, 0, 0, 0)
-        l_pos.addWidget(QLabel("X (Left):"))
-        self.x_edit = QLineEdit("100px")
-        l_pos.addWidget(self.x_edit)
-        l_pos.addWidget(QLabel("Y (Top):"))
-        self.y_edit = QLineEdit("100px")
-        l_pos.addWidget(self.y_edit)
-        layout.addWidget(QLabel("Position (absolute):"))
-        layout.addWidget(grp_pos)
+        l_basic.addLayout(row1)
 
         # Size
-        grp_size = QWidget()
+        grp_size = QGroupBox("Dimensions")
         l_size = QHBoxLayout(grp_size)
-        l_size.setContentsMargins(0, 0, 0, 0)
         l_size.addWidget(QLabel("Width:"))
         self.w_edit = QLineEdit("300px")
         l_size.addWidget(self.w_edit)
         l_size.addWidget(QLabel("Height:"))
         self.h_edit = QLineEdit("auto")
         l_size.addWidget(self.h_edit)
-        layout.addWidget(QLabel("Size:"))
-        layout.addWidget(grp_size)
+        l_basic.addWidget(grp_size)
 
+        # Position (Absolute)
+        grp_pos = QGroupBox("Absolute Position (HTML)")
+        l_pos = QHBoxLayout(grp_pos)
+        l_pos.addWidget(QLabel("X (Left):"))
+        self.x_edit = QLineEdit("100px")
+        l_pos.addWidget(self.x_edit)
+        l_pos.addWidget(QLabel("Y (Top):"))
+        self.y_edit = QLineEdit("100px")
+        l_pos.addWidget(self.y_edit)
+        l_basic.addWidget(grp_pos)
+        l_basic.addWidget(QLabel("<small><i>Note: Absolute positioning generates HTML tags.</i></small>"))
+        
+        l_basic.addStretch()
+        self.tabs.addTab(tab_basic, "Basic")
+
+        # --- Tab 2: Filters ---
+        tab_filters = QWidget()
+        l_filters = QFormLayout(tab_filters)
+        
+        # Opacity
+        self.opacity_slider = QSlider(Qt.Horizontal)
+        self.opacity_slider.setRange(0, 100)
+        self.opacity_slider.setValue(100)
+        self.opacity_lbl = QLabel("100%")
+        self.opacity_slider.valueChanged.connect(lambda v: self.opacity_lbl.setText(f"{v}%"))
+        l_filters.addRow("Opacity:", self._wrap_slider(self.opacity_slider, self.opacity_lbl))
+        
+        # Blur
+        self.blur_spin = QDoubleSpinBox()
+        self.blur_spin.setRange(0, 100)
+        self.blur_spin.setSuffix(" px")
+        self.blur_spin.setValue(0)
+        l_filters.addRow("Blur:", self.blur_spin)
+        
+        # Grayscale
+        self.gray_slider = QSlider(Qt.Horizontal)
+        self.gray_slider.setRange(0, 100)
+        self.gray_slider.setValue(0)
+        self.gray_lbl = QLabel("0%")
+        self.gray_slider.valueChanged.connect(lambda v: self.gray_lbl.setText(f"{v}%"))
+        l_filters.addRow("Grayscale:", self._wrap_slider(self.gray_slider, self.gray_lbl))
+        
+        # Sepia
+        self.sepia_slider = QSlider(Qt.Horizontal)
+        self.sepia_slider.setRange(0, 100)
+        self.sepia_slider.setValue(0)
+        self.sepia_lbl = QLabel("0%")
+        self.sepia_slider.valueChanged.connect(lambda v: self.sepia_lbl.setText(f"{v}%"))
+        l_filters.addRow("Sepia:", self._wrap_slider(self.sepia_slider, self.sepia_lbl))
+        
+        # Invert
+        self.invert_chk = QCheckBox("Invert Colors")
+        l_filters.addRow("", self.invert_chk)
+        
+        self.tabs.addTab(tab_filters, "Filters")
+
+        # --- Tab 3: Presets (Marpit) ---
+        tab_presets = QWidget()
+        l_presets = QVBoxLayout(tab_presets)
+        
+        self.rdo_inline = QRadioButton("Inline (Standard)")
+        self.rdo_inline.setChecked(True)
+        self.rdo_bg = QRadioButton("Background Image")
+        self.rdo_split_left = QRadioButton("Split Left (Background)")
+        self.rdo_split_right = QRadioButton("Split Right (Background)")
+        
+        l_presets.addWidget(self.rdo_inline)
+        l_presets.addWidget(self.rdo_bg)
+        l_presets.addWidget(self.rdo_split_left)
+        l_presets.addWidget(self.rdo_split_right)
+        
+        l_presets.addSpacing(10)
+        self.chk_cover = QCheckBox("Background Cover (Scale to fill)")
+        self.chk_contain = QCheckBox("Background Contain (Scale to fit)")
+        self.chk_cover.setChecked(True) # Default for bg usually
+        
+        # Logic: Contain/Cover mutually exclusive-ish, usually last wins in CSS but let's just let user pick
+        l_presets.addWidget(QLabel("<b>Background Options:</b>"))
+        l_presets.addWidget(self.chk_cover)
+        l_presets.addWidget(self.chk_contain)
+        
+        l_presets.addStretch()
+        self.tabs.addTab(tab_presets, "Mode / Presets")
+
+        # Buttons
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
 
-    def _browse(self):
-        # We start in the CWD (which should mean the deck's directory if loaded/saved)
-        # But we can also fallback to base_path if provided.
-        start = str(self.base_path.parent) if (self.base_path and self.base_path.parent.exists()) else os.getcwd()
+    def _wrap_slider(self, slider, lbl):
+        w = QWidget()
+        l = QHBoxLayout(w)
+        l.setContentsMargins(0,0,0,0)
+        l.addWidget(slider)
+        l.addWidget(lbl)
+        return w
 
+    def _browse(self):
+        start = str(self.base_path.parent) if (self.base_path and self.base_path.parent.exists()) else os.getcwd()
         p, _ = QFileDialog.getOpenFileName(self, "Select Image", start, "Images (*.png *.jpg *.jpeg *.svg *.gif);;All files (*)")
         if p:
-            # Always try to make it relative to CWD (which is where the deck is)
             try:
-                rel = os.path.relpath(p, os.getcwd())
+                rel = os.path.relpath(p, start)
                 p = rel
             except ValueError:
-                # If on different drive or fails, keep absolute
                 pass
             self.path_edit.setText(p)
 
-    def get_html_tag(self) -> str:
+    def get_result(self) -> str:
         src = self.path_edit.text().strip()
+        
+        # 1. Gather Filters
+        filters = []
+        if self.opacity_slider.value() < 100:
+            # marpit: opacity:0.5
+            filters.append(f"opacity:{self.opacity_slider.value()/100:.2f}")
+        if self.blur_spin.value() > 0:
+            filters.append(f"blur:{int(self.blur_spin.value())}px")
+        if self.gray_slider.value() > 0:
+            filters.append(f"grayscale:{self.gray_slider.value()/100:.2f}")
+        if self.sepia_slider.value() > 0:
+            filters.append(f"sepia:{self.sepia_slider.value()/100:.2f}")
+        if self.invert_chk.isChecked():
+            filters.append("invert:1")
+
+        # 2. Determine Mode
+        is_bg = False
+        is_split = False
+        split_dir = ""
+        
+        if self.rdo_bg.isChecked():
+            is_bg = True
+        elif self.rdo_split_left.isChecked():
+            is_bg = True
+            is_split = True
+            split_dir = "left"
+        elif self.rdo_split_right.isChecked():
+            is_bg = True
+            is_split = True
+            split_dir = "right"
+            
+        # 3. Construct Output
+        
+        # CASE A: Background or Split (Marpit Markdown)
+        if is_bg:
+            # ![bg left:33% blur:10px](path)
+            keywords = ["bg"]
+            if is_split:
+                keywords.append(f"{split_dir}:33%") # Default split size
+            
+            if self.chk_cover.isChecked(): keywords.append("cover")
+            if self.chk_contain.isChecked(): keywords.append("contain")
+            
+            keywords.extend(filters)
+            
+            return f"![{' '.join(keywords)}]({src})\n"
+
+        # CASE B: Inline with Absolute Positioning (HTML)
         x = self.x_edit.text().strip()
         y = self.y_edit.text().strip()
         w = self.w_edit.text().strip()
+        
+        # If user entered absolute pos, use HTML
+        # Note: '100px' is default in UI, so check if they changed it or if they want it.
+        # Let's say if they are viewing the basic tab and didn't touch mode... 
+        # Actually, if they use absolute pos, we MUST use HTML.
+        # But if they just want a simple inline image with filters, we can use markdown.
+        
+        has_abs_pos = (x or y) and (x != "100px" or y != "100px") # Weak heuristic?
+        # Better: Check if the fields are not empty/default? 
+        # For now, let's treat "Basic" tab inputs as overrides if they are set to something specific.
+        # But actually, the previous implementation ALWAYS returned HTML.
+        # Let's try to prefer Markdown if possible.
+        
+        # If standard inline...
+        
+        # If absolute positioning is active (meaning user intends to use it), use HTML.
+        # But how do we know? The UI has defaults.
+        # Let's assume if they are on Tab 1, they might want absolute.
+        # But simpler: Check if they look like they want absolute.
+        # If x/y are default, maybe they don't care. 
+        
+        # Let's prioritize: 
+        # If filters are present -> prefer Markdown unless absolute pos is strictly needed?
+        # HTML <img> tags don't support `filter` attribute easily without `style="filter:..."` which is fine.
+        
         h = self.h_edit.text().strip()
-
-        style = "position: absolute;"
-        if x: style += f" left: {x};"
-        if y: style += f" top: {y};"
-        if w: style += f" width: {w};"
-        if h and h != "auto": style += f" height: {h};"
-
-        return f'<img src="{src}" style="{style}" />'
+        
+        style_parts = []
+        if x and x != "auto": style_parts.append(f"left: {x};")
+        if y and y != "auto": style_parts.append(f"top: {y};")
+        if w and w != "auto": style_parts.append(f"width: {w};")
+        if h and h != "auto": style_parts.append(f"height: {h};")
+        
+        css_filters = []
+        if self.opacity_slider.value() < 100: css_filters.append(f"opacity({self.opacity_slider.value()/100})")
+        if self.blur_spin.value() > 0: css_filters.append(f"blur({self.blur_spin.value()}px)")
+        if self.gray_slider.value() > 0: css_filters.append(f"grayscale({self.gray_slider.value()/100})")
+        if self.sepia_slider.value() > 0: css_filters.append(f"sepia({self.sepia_slider.value()/100})")
+        if self.invert_chk.isChecked(): css_filters.append("invert(1)")
+        
+        if css_filters:
+            style_parts.append(f"filter: {' '.join(css_filters)};")
+            
+        if style_parts:
+             # Absolute pos implies position:absolute
+            if "left:" in "".join(style_parts) or "top:" in "".join(style_parts):
+                 style = "position: absolute; " + " ".join(style_parts)
+            else:
+                 style = " ".join(style_parts)
+                 
+            return f'<img src="{src}" style="{style}" />'
+            
+        # Fallback: Simple Markdown if no styles/pos/filters
+        # ![w:300px](src)
+        # Marpit supports width/height in alt text keywords too
+        keywords = []
+        if w and w != "auto": keywords.append(f"w:{w}")
+        if h and h != "auto": keywords.append(f"h:{h}")
+        keywords.extend(filters) # Re-use Marpit syntax filters
+        
+        return f"![{' '.join(keywords)}]({src})"
 
 
 class GlobalBackgroundDialog(QDialog):
@@ -2052,7 +2234,7 @@ class MainWindow(QMainWindow):
 
         dlg = InsertImageDialog(self, base_path=self.deck.file_path)
         if dlg.exec():
-            html_tag = dlg.get_html_tag()
+            html_tag = dlg.get_result()
             self.insert_template(html_tag)
 
     def set_global_background(self):

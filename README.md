@@ -7,12 +7,22 @@ A single-file GUI editor for Marpit / Marp slide decks, built with Python and Py
 - **Slide Editor**: Edit one slide at a time with formatting buttons.
 - **Live Preview**: Real-time rendering using Marp CLI and Qt WebEngine (defaults to 1/3 window width).
 - **Spell Check**: Automatic English spell checking (misspelled words underlined in red).
+![Editor UI](screenshots/main_ui.png)
+
 - **Configurable Pagination**: Toggle page numbers and customize their font, size, color, and position via the 'Deck' menu.
 - **Slide Properties Panel**: A dockable panel to easily toggle local slide directives (`paginate`, `header`, `footer`) and edit **Presenter Notes**.
 - **Math Support**:
   - **Inline Math**: Button (`∑`) to insert `$ E=mc^2 $`.
   - **Block Math**: Button (`$$`) to insert centered equations.
-- **Visual Math Editor**: An interactive dialog to build LaTeX equations graphically with a live preview and symbol toolbar. Supports editing existing formulas.
+
+  ![Visual Math Editor](screenshots/math_editor.png)
+  - **Visual Math Editor**: An interactive dialog to build LaTeX equations graphically with a live preview and symbol toolbar. Supports editing existing formulas.
+
+- **Advanced Image Tools**:
+  - **Filters**: Helper to apply Blur, Opacity, Grayscale, Sepia, and Invert effects.
+  - **Presets**: One-click setup for Background images, Split Layouts (`bg left`), and Cover/Contain scaling.
+  ![Image Tools](screenshots/image_tools.png)
+
 - **Allow Local Files**: Toggle in the 'File' menu to enable the preview to load images and resources from the local disk (enabled by default).
 
 ## Quick Start

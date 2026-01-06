@@ -341,6 +341,7 @@ class ExportDialog(QDialog):
         self.format_combo.addItem("HTML (.html)", "html")
         self.format_combo.addItem("PDF (.pdf)", "pdf")
         self.format_combo.addItem("PowerPoint (.pptx)", "pptx")
+        self.format_combo.setCurrentIndex(1) # Select PDF by default
         row2.addWidget(self.format_combo)
         self.allow_local_chk = QCheckBox("Allow local files (images, etc.)")
         self.allow_local_chk.setChecked(bool(allow_local))
@@ -353,6 +354,9 @@ class ExportDialog(QDialog):
         layout.addWidget(buttons)
 
         self.format_combo.currentIndexChanged.connect(self._sync_ext)
+        
+        # Sync extension on init
+        self._sync_ext()
 
     def _browse(self):
         fmt = self.format_combo.currentData()

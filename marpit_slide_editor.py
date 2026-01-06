@@ -1229,12 +1229,14 @@ class MainWindow(QMainWindow):
         style = self.style()
 
         act_new = QAction("New deck", self)
+        act_new.setToolTip("Create a new slide deck (Ctrl+N)")
         act_new.setIcon(style.standardIcon(QStyle.SP_FileIcon))
         act_new.setShortcut(QKeySequence.New)
         act_new.triggered.connect(self.new_deck)
         file_tb.addAction(act_new)
 
         act_open = QAction("Open…", self)
+        act_open.setToolTip("Open an existing Marp Markdown file (Ctrl+O)")
         act_open.setIcon(style.standardIcon(QStyle.SP_DialogOpenButton))
         act_open.setShortcut(QKeySequence.Open)
         act_open.triggered.connect(self.open_deck)
@@ -1243,18 +1245,21 @@ class MainWindow(QMainWindow):
         # Open Recent
         self.btn_recent = QToolButton()
         self.btn_recent.setText("Open Recent ▾")
+        self.btn_recent.setToolTip("Open a recently modified file")
         self.btn_recent.setPopupMode(QToolButton.InstantPopup)
         self.menu_recent = QMenu(self.btn_recent)
         self.btn_recent.setMenu(self.menu_recent)
         file_tb.addWidget(self.btn_recent)
 
         act_save = QAction("Save", self)
+        act_save.setToolTip("Save the current deck (Ctrl+S)")
         act_save.setIcon(style.standardIcon(QStyle.SP_DialogSaveButton))
         act_save.setShortcut(QKeySequence.Save)
         act_save.triggered.connect(self.save_deck)
         file_tb.addAction(act_save)
 
         act_save_as = QAction("Save as…", self)
+        act_save_as.setToolTip("Save the current deck as a new file (Ctrl+Shift+S)")
         act_save_as.setShortcut(QKeySequence.SaveAs)
         act_save_as.triggered.connect(self.save_deck_as)
         file_tb.addAction(act_save_as)
@@ -1264,6 +1269,7 @@ class MainWindow(QMainWindow):
         # Templates Menu
         btn_tmpl = QToolButton()
         btn_tmpl.setText("Templates ▾")
+        btn_tmpl.setToolTip("Create new or insert slides from templates")
         btn_tmpl.setPopupMode(QToolButton.InstantPopup)
         menu_tmpl = QMenu(btn_tmpl)
         
@@ -1279,12 +1285,14 @@ class MainWindow(QMainWindow):
         file_tb.addSeparator()
 
         act_export = QAction("Generate slides…", self)
+        act_export.setToolTip("Export the deck to PDF, HTML, or PowerPoint")
         act_export.triggered.connect(self.export_deck)
         file_tb.addAction(act_export)
 
         file_tb.addSeparator()
 
         self.act_allow_local = QAction("Allow local files", self)
+        self.act_allow_local.setToolTip("Allow loading local images and resources in preview")
         self.act_allow_local.setCheckable(True)
         self.act_allow_local.setChecked(True)
         self.act_allow_local.triggered.connect(self._toggle_allow_local_files)
@@ -1300,6 +1308,7 @@ class MainWindow(QMainWindow):
 
         deck_btn = QToolButton()
         deck_btn.setText("Deck ▾")
+        deck_btn.setToolTip("Global presentation settings")
         deck_btn.setPopupMode(QToolButton.InstantPopup)
         deck_menu = QMenu(deck_btn)
 
@@ -1328,14 +1337,14 @@ class MainWindow(QMainWindow):
         self.addToolBar(slide_tb)
 
         act_add = QAction("Add", self) # Shortened text for toolbar
-        act_add.setToolTip("Add Slide")
+        act_add.setToolTip("Add a new slide after the current one (Ctrl+Shift+N)")
         act_add.setIcon(style.standardIcon(QStyle.SP_FileDialogNewFolder)) # Best approx for "Add"
         act_add.setShortcut(QKeySequence("Ctrl+Shift+N"))
         act_add.triggered.connect(self.add_slide_after_current)
         slide_tb.addAction(act_add)
 
         act_del = QAction("Delete", self)
-        act_del.setToolTip("Delete Slide")
+        act_del.setToolTip("Delete the current slide (Ctrl+Shift+Del)")
         act_del.setIcon(style.standardIcon(QStyle.SP_TrashIcon))
         act_del.setShortcut(QKeySequence("Ctrl+Shift+Del"))
         act_del.triggered.connect(self.delete_current_slide)
@@ -1345,6 +1354,7 @@ class MainWindow(QMainWindow):
 
         slide_btn = QToolButton()
         slide_btn.setText("Slide Options ▾")
+        slide_btn.setToolTip("Slide-specific options (backgrounds, styles)")
         slide_btn.setPopupMode(QToolButton.InstantPopup)
         slide_menu = QMenu(slide_btn)
 
@@ -1405,17 +1415,23 @@ class MainWindow(QMainWindow):
         editor_layout.addWidget(fmt_tb)
 
         # Text Formatting (Using Emojis/Text as Icons)
-        fmt_tb.addAction(self._make_action("H1", lambda: self.set_line_heading(1)))
-        fmt_tb.addAction(self._make_action("H2", lambda: self.set_line_heading(2)))
-        fmt_tb.addAction(self._make_action("H3", lambda: self.set_line_heading(3)))
+        fmt_tb.addAction(self._make_action("H1", lambda: self.set_line_heading(1), "Heading 1 (Slide Title)"))
+        fmt_tb.addAction(self._make_action("H2", lambda: self.set_line_heading(2), "Heading 2"))
+        fmt_tb.addAction(self._make_action("H3", lambda: self.set_line_heading(3), "Heading 3"))
         fmt_tb.addSeparator()
-        fmt_tb.addAction(self._make_action("📝 List", lambda: self.set_line_list("-")))
-        fmt_tb.addAction(self._make_action("🔢 Num", self.set_line_numbered))
+        fmt_tb.addAction(self._make_action("📝 List", lambda: self.set_line_list("-"), "Bulleted List"))
+        fmt_tb.addAction(self._make_action("🔢 Num", self.set_line_numbered, "Numbered List"))
+        fmt_tb.addSeparator()
+        
+        # Math Support
+        fmt_tb.addAction(self._make_action("∑", self.insert_inline_math, "Insert Inline Math ($...$)"))
+        fmt_tb.addAction(self._make_action("$$", self.insert_block_math, "Insert Block Math ($$...$$)"))
         fmt_tb.addSeparator()
 
         # Insert Menu
         ins_btn = QToolButton()
         ins_btn.setText("Insert ▾")
+        ins_btn.setToolTip("Insert images, code blocks, quotes, etc.")
         ins_btn.setPopupMode(QToolButton.InstantPopup)
         ins_menu = QMenu(ins_btn)
 
@@ -1501,9 +1517,11 @@ class MainWindow(QMainWindow):
             # cursor.setPosition(min(pos, len(new_txt))) # naive restore
             # self.editor.setTextCursor(cursor)
 
-    def _make_action(self, text: str, slot):
+    def _make_action(self, text: str, slot, tooltip: str = ""):
         act = QAction(text, self)
         act.triggered.connect(slot)
+        if tooltip:
+            act.setToolTip(tooltip)
         return act
 
     # ---------------- State helpers ----------------
@@ -2772,6 +2790,25 @@ class MainWindow(QMainWindow):
             pass
         event.accept()
 
+    def insert_inline_math(self):
+        """Insert $  $ and place cursor in middle."""
+        cursor = self.editor.textCursor()
+        cursor.insertText("$  $")
+        cursor.movePosition(QTextCursor.Left, QTextCursor.MoveAnchor, 2)
+        self.editor.setTextCursor(cursor)
+        self.editor.setFocus()
+
+    def insert_block_math(self):
+        """Insert block math $$ ... $$ and place cursor in middle."""
+        cursor = self.editor.textCursor()
+        # Check if we are at start of line, else insert newline
+        # Simple approach: Insert \n$$\n\n$$\n
+        text = "\n$$\n\n$$\n"
+        cursor.insertText(text)
+        # Move back up 2 lines
+        cursor.movePosition(QTextCursor.Up, QTextCursor.MoveAnchor, 2)
+        self.editor.setTextCursor(cursor)
+        self.editor.setFocus()
 
     # ---------------- Preview rendering ----------------
     def _schedule_preview(self):

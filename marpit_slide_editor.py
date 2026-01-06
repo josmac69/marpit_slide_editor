@@ -167,6 +167,26 @@ def parse_marp_markdown(text: str) -> Tuple[str, List[str]]:
     return preamble, slides
 
 
+class TemplateManager:
+    """Manages loading templates from the templates/ directory."""
+    def __init__(self, root_dir: Path):
+        self.templates_dir = root_dir / "templates"
+    
+    def get_available_templates(self) -> List[Path]:
+        if not self.templates_dir.exists():
+            return []
+        return sorted(list(self.templates_dir.glob("*.md")))
+
+    def load_template(self, path: Path) -> Tuple[str, List[str]]:
+        try:
+            text = path.read_text(encoding="utf-8")
+            return parse_marp_markdown(text)
+        except Exception as e:
+            print(f"Error loading template {path}: {e}")
+            return "", [""]
+
+
+
 def serialize_marp_markdown(preamble: str, slides: List[str]) -> str:
     pre = preamble or ""
     # Ensure preamble ends with exactly one blank line if present
@@ -958,6 +978,9 @@ class MainWindow(QMainWindow):
         self.launch_cwd = launch_cwd or Path.cwd()
 
         self.marp_cmd = find_marp_cli_command()
+        
+        # Initialize Template Manager
+        self.template_manager = TemplateManager(Path(__file__).parent)
 
         self.deck = DeckState.new_default()
         self._current_slide_idx = 0
@@ -1034,6 +1057,23 @@ class MainWindow(QMainWindow):
         act_save_as.setShortcut(QKeySequence.SaveAs)
         act_save_as.triggered.connect(self.save_deck_as)
         file_tb.addAction(act_save_as)
+
+        file_tb.addSeparator()
+
+        # Templates Menu
+        btn_tmpl = QToolButton()
+        btn_tmpl.setText("Templates ▾")
+        btn_tmpl.setPopupMode(QToolButton.InstantPopup)
+        menu_tmpl = QMenu(btn_tmpl)
+        
+        # Populate templates dynamically
+        self.menu_new_tmpl = menu_tmpl.addMenu("New from Template")
+        self.menu_ins_tmpl = menu_tmpl.addMenu("Insert Template")
+        # We'll populate these on show/init
+        self._populate_template_menus()
+        
+        btn_tmpl.setMenu(menu_tmpl)
+        file_tb.addWidget(btn_tmpl)
 
         file_tb.addSeparator()
 
@@ -1419,6 +1459,65 @@ class MainWindow(QMainWindow):
         self._add_recent_file(path)
         return True
 
+        self._schedule_preview()
+
+    def _populate_template_menus(self):
+        self.menu_new_tmpl.clear()
+        self.menu_ins_tmpl.clear()
+        
+        templates = self.template_manager.get_available_templates()
+        if not templates:
+            non = QAction("(No templates found)", self)
+            non.setEnabled(False)
+            self.menu_new_tmpl.addAction(non)
+            self.menu_ins_tmpl.addAction(non)
+            return
+
+        for p in templates:
+            name = p.stem.replace("_", " ")
+            
+            # New from Template
+            act_new = QAction(name, self)
+            act_new.triggered.connect(lambda checked=False, path=p: self.new_from_template(path))
+            self.menu_new_tmpl.addAction(act_new)
+
+            # Insert Template
+            act_ins = QAction(name, self)
+            act_ins.triggered.connect(lambda checked=False, path=p: self.insert_template_from_file(path))
+            self.menu_ins_tmpl.addAction(act_ins)
+
+    def new_from_template(self, path: Path):
+        if not self._confirm_discard_if_dirty():
+            return
+        
+        preamble, slides = self.template_manager.load_template(path)
+        self.deck = DeckState(preamble=preamble, slides=slides, file_path=None, dirty=True)
+        self._current_slide_idx = 0
+        self._refresh_slide_list()
+        self._load_slide_into_editor(0)
+        self._update_window_title()
+        self._update_status(f"Created new deck from template: {path.stem}")
+        self._schedule_preview()
+
+    def insert_template_from_file(self, path: Path):
+        self._maybe_commit_current_editor()
+        
+        _, new_slides = self.template_manager.load_template(path)
+        # Append logic? or Insert at cursor? Let's append for now or insert after current
+        insert_at = self._current_slide_idx + 1
+        
+        for s in reversed(new_slides):
+            self.deck.slides.insert(insert_at, s)
+        
+        self.deck.dirty = True
+        self._refresh_slide_list()
+        # Jump to first inserted slide
+        self._current_slide_idx = insert_at
+        self._load_slide_into_editor(insert_at)
+        self._update_window_title()
+        self._update_status(f"Inserted template slides: {path.stem}")
+        self._schedule_preview()
+        
     def add_slide_after_current(self):
         self._maybe_commit_current_editor()
         insert_at = self._current_slide_idx + 1

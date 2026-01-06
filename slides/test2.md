@@ -3,31 +3,21 @@ marp: true
 theme: default
 paginate: true
 html: true
-header: "![h:50](dream_ayq34yd7tfi.jpg)  - FedCon 2026 - creative workshop - ![h:50](dream_ayq34yd7tfi.jpg)"
-footer: "Josef Machytka 2026"
+header: "![h:50](dream_ayq34yd7tfi.jpg)  FedCon 2026 - Creative Writing WorkShop ![h:50](dream_ayq34yd7tfi.jpg) "
+footer: "Josef Machytka"
 style: |
-  body, .marpit {
-    background-color: white !important;
-  }
-  section {
-    background-color: white !important;
-    background-image: linear-gradient(rgba(255,255,255,0.83), rgba(255,255,255,0.83)), url('dream_ayq34yd7tfi.jpg');
-    background-repeat: no-repeat;
-    background-position: center center;
-    background-size: cover;
-  }
   header {
     height: 100px;
-    font-size: 24px;
-    color: #c01c28;
-    text-align: right;
-    display: block;
+    font-size: 18px;
+    display: flex !important;
+    justify-content: space-between !important;
+    align-items: center;
+    text-align: left;
   }
   footer {
     height: 50px;
-    font-size: 15px;
-    color: #1a5fb4;
-    text-align: center;
+    font-size: 18px;
+    text-align: center !important;
     display: block;
   }
 ---

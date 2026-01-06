@@ -1865,6 +1865,8 @@ class MainWindow(QMainWindow):
                 m_prop = re.search(rf"{prop}:\s*([^;]+)", block_content)
                 if m_prop:
                     val = m_prop.group(1).strip()
+                    # clean optional "!important" for reading back
+                    val = val.replace("!important", "").strip()
                     # clean "px"
                     if val.endswith("px"):
                         return int(val[:-2])
@@ -1937,12 +1939,12 @@ class MainWindow(QMainWindow):
                 if d.get('font_family'):
                     css += f"  font-family: {d['font_family']};\n"
                 if d['align'] == 'spread':
-                    css += "  display: flex;\n"
-                    css += "  justify-content: space-between;\n"
+                    css += "  display: flex !important;\n"
+                    css += "  justify-content: space-between !important;\n"
                     css += "  align-items: center;\n"
                     css += "  text-align: left;\n" # fallback
                 else:
-                    css += f"  text-align: {d['align']};\n"
+                    css += f"  text-align: {d['align']} !important;\n"
                     css += "  display: block;\n" # reset
 
                 # Position

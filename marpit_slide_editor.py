@@ -54,6 +54,7 @@ from PySide6.QtWidgets import (
     QDoubleSpinBox,
     QFileDialog,
     QFormLayout,
+    QGridLayout,
     QGroupBox,
     QHBoxLayout,
     QLabel,
@@ -1123,6 +1124,164 @@ class SlidePropertiesWidget(QDockWidget):
         return text.strip()
 
 
+# -----------------------------------------------------------------------------
+# Visual Math Editor Dialog
+# -----------------------------------------------------------------------------
+MATH_PREVIEW_TEMPLATE = """
+<!DOCTYPE html>
+<html>
+<head>
+<script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+<script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+<style>
+body { font-family: sans-serif; font-size: 20px; padding: 20px; text-align: center; }
+.math-container { border: 1px dashed #ccc; padding: 20px; min-height: 50px; display: inline-block; }
+</style>
+</head>
+<body>
+<div id="content" class="math-container">
+$$ %s $$
+</div>
+<script>
+// Reload MathJax if needed
+if (window.MathJax && MathJax.typesetPromise) {
+    MathJax.typesetPromise();
+}
+</script>
+</body>
+</html>
+"""
+
+class MathEditorDialog(QDialog):
+    def __init__(self, parent=None, initial_text=""):
+        super().__init__(parent)
+        self.setWindowTitle("Visual Math Editor")
+        self.resize(900, 600)
+        
+        main_layout = QHBoxLayout(self)
+        
+        # Left Panel: Symbols + Input
+        left_panel = QWidget()
+        left_layout = QVBoxLayout(left_panel)
+        
+        # 1. Symbol Toolbar (Tabs or Grid)
+        # We'll use a TabWidget for categories
+        self.tabs = QTabWidget()
+        self.tabs.setFixedHeight(300)
+        left_layout.addWidget(self.tabs)
+        
+        self._add_symbol_tab("Greek", [
+            ("α", "\\alpha"), ("β", "\\beta"), ("γ", "\\gamma"), ("δ", "\\delta"), ("ε", "\\epsilon"),
+            ("θ", "\\theta"), ("λ", "\\lambda"), ("μ", "\\mu"), ("π", "\\pi"), ("ρ", "\\rho"),
+            ("σ", "\\sigma"), ("τ", "\\tau"), ("φ", "\\phi"), ("ω", "\\omega"),
+            ("Δ", "\\Delta"), ("Σ", "\\Sigma"), ("Ω", "\\Omega")
+        ])
+        
+        self._add_symbol_tab("Operators", [
+            ("+", "+"), ("-", "-"), ("×", "\\times"), ("÷", "\\div"), ("±", "\\pm"), ("∓", "\\mp"), ("·", "\\cdot"),
+            ("=", "="), ("≠", "\\neq"), ("≈", "\\approx"), ("<", "<"), (">", ">"), ("≤", "\\leq"), ("≥", "\\geq"),
+            ("∈", "\\in"), ("∉", "\\notin"), ("⊂", "\\subset"), ("⊃", "\\supset"), ("∪", "\\cup"), ("∩", "\\cap")
+        ])
+        
+        self._add_symbol_tab("Structures", [
+            ("x/y", "\\frac{x}{y}"), ("√", "\\sqrt{x}"), ("xⁿ", "x^{n}"), ("xₙ", "x_{n}"), 
+            ("∑", "\\sum_{i=1}^{n}"), ("∏", "\\prod"), ("∫", "\\int"), ("lim", "\\lim_{x \\to 0}")
+        ])
+        
+        self._add_symbol_tab("Arrows", [
+            ("→", "\\to"), ("←", "\\leftarrow"), ("⇒", "\\Rightarrow"), ("⇔", "\\Leftrightarrow"), ("↦", "\\mapsto"), ("∞", "\\infty")
+        ])
+
+        # 2. Input Area
+        left_layout.addWidget(QLabel("LaTeX Input:"))
+        self.txt_input = QPlainTextEdit()
+        self.txt_input.setPlaceholderText("Type LaTeX math here...")
+        self.txt_input.setPlainText(initial_text)
+        self.txt_input.textChanged.connect(self._update_preview)
+        left_layout.addWidget(self.txt_input)
+        
+        # 3. Buttons
+        btn_box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        btn_box.accepted.connect(self.accept)
+        btn_box.rejected.connect(self.reject)
+        left_layout.addWidget(btn_box)
+
+        main_layout.addWidget(left_panel, 1)
+        
+        # Right Panel: Live Preview
+        right_panel = QWidget()
+        right_layout = QVBoxLayout(right_panel)
+        right_layout.addWidget(QLabel("Live Preview:"))
+        
+        if WEBENGINE_AVAILABLE:
+            self.preview_view = QWebEngineView()
+            right_layout.addWidget(self.preview_view, 1)
+        else:
+            self.preview_view = QLabel("Preview not available (WebEngine missing)")
+            self.preview_view.setAlignment(Qt.AlignCenter)
+            self.preview_view.setStyleSheet("background: white; border: 1px solid #ccc;")
+            right_layout.addWidget(self.preview_view, 1)
+
+        main_layout.addWidget(right_panel, 1)
+        
+        # Debounce timer
+        self._timer = QTimer()
+        self._timer.setSingleShot(True)
+        self._timer.setInterval(300)
+        self._timer.timeout.connect(self._render_preview)
+        
+        # Initial render
+        self._render_preview()
+
+    def _add_symbol_tab(self, name, symbols):
+        page = QWidget()
+        grid = QGridLayout(page)
+        
+        row, col = 0, 0
+        max_cols = 5
+        
+        for display, latex in symbols:
+            btn = QToolButton()
+            btn.setText(display)
+            btn.setToolTip(latex)
+            btn.setFixedSize(40, 40)
+            # When clicked, insert symbol
+            # We need to capture 'latex' correctly in lambda
+            btn.clicked.connect(lambda _, s=latex: self._insert_symbol(s))
+            
+            grid.addWidget(btn, row, col)
+            col += 1
+            if col >= max_cols:
+                col = 0
+                row += 1
+                
+        # Push to top
+        grid.setRowStretch(row + 1, 1)
+        self.tabs.addTab(page, name)
+
+    def _insert_symbol(self, symbol):
+        self.txt_input.insertPlainText(symbol)
+        self.txt_input.setFocus()
+
+    def _update_preview(self):
+        self._timer.start()
+        
+    def _render_preview(self):
+        if not WEBENGINE_AVAILABLE:
+            return
+            
+        tex = self.txt_input.toPlainText()
+        # Escape backslashes for JS string or simple HTML replacement
+        # We are injecting into HTML body directly via format
+        # HTML template expects simple string
+        html = MATH_PREVIEW_TEMPLATE % tex
+        
+        self.preview_view.setHtml(html)
+
+    def get_latex(self):
+        return self.txt_input.toPlainText().strip()
+
+
 class MainWindow(QMainWindow):
 
 
@@ -1436,6 +1595,8 @@ class MainWindow(QMainWindow):
         ins_menu = QMenu(ins_btn)
 
         ins_menu.addAction("Insert Picture...", self.insert_picture_dialog)
+        ins_menu.addSeparator()
+        ins_menu.addAction("Visual Math Editor...", self.open_visual_math_editor)
         ins_menu.addSeparator()
         ins_menu.addAction("Inline Image", lambda: self.insert_template("![](path-or-url)\n"))
         ins_menu.addAction("Quote", self.set_line_quote)
@@ -2809,6 +2970,26 @@ class MainWindow(QMainWindow):
         cursor.movePosition(QTextCursor.Up, QTextCursor.MoveAnchor, 2)
         self.editor.setTextCursor(cursor)
         self.editor.setFocus()
+
+    def open_visual_math_editor(self):
+        dlg = MathEditorDialog(self)
+        if dlg.exec() == QDialog.Accepted:
+            latex = dlg.get_latex()
+            if not latex:
+                return
+            
+            # Decide if block or inline
+            # Heuristic: if contains newlines, probably block
+            if "\n" in latex or "\\begin" in latex:
+                # Block
+                text = f"\n$$\n{latex}\n$$\n"
+            else:
+                # Inline
+                text = f"${latex}$"
+                
+            cursor = self.editor.textCursor()
+            cursor.insertText(text)
+            self.editor.setFocus()
 
     # ---------------- Preview rendering ----------------
     def _schedule_preview(self):

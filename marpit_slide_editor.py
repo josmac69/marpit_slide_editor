@@ -50,6 +50,7 @@ from PySide6.QtWidgets import (
     QColorDialog,
     QDialog,
     QDialogButtonBox,
+    QDockWidget,
     QDoubleSpinBox,
     QFileDialog,
     QFormLayout,
@@ -974,7 +975,156 @@ class PaginationDialog(QDialog):
             'pos': self.combo_pos.currentData()
         }
 
+# -----------------------------------------------------------------------------
+# Slide Properties Widget (Dock)
+# -----------------------------------------------------------------------------
+class SlidePropertiesWidget(QDockWidget):
+    def __init__(self, parent=None):
+        super().__init__("Slide Properties", parent)
+        self.setAllowedAreas(Qt.LeftDockWidgetArea | Qt.RightDockWidgetArea)
+        
+        container = QWidget()
+        self.setWidget(container)
+        layout = QVBoxLayout(container)
+        
+        # 1. Directives Group
+        grp_dir = QGroupBox("Local Directives")
+        form = QFormLayout(grp_dir)
+        
+        self.chk_paginate = QCheckBox("Show Page Number (paginate)")
+        form.addRow(self.chk_paginate)
+        
+        self.chk_header = QCheckBox("Show Header (undo _header: \"\")")
+        self.chk_header.setToolTip("If unchecked, adds <!-- _header: \"\" --> to hide global header.")
+        form.addRow(self.chk_header)
+        
+        self.chk_footer = QCheckBox("Show Footer (undo _footer: \"\")")
+        self.chk_footer.setToolTip("If unchecked, adds <!-- _footer: \"\" --> to hide global footer.")
+        form.addRow(self.chk_footer)
+        
+        layout.addWidget(grp_dir)
+        
+        # 2. Key/Value Directives (Simplified)
+        # For now, just a simplified text edit for specific storage if needed, or skip.
+        
+        # 3. Presenter Notes
+        grp_notes = QGroupBox("Presenter Notes")
+        notes_layout = QVBoxLayout(grp_notes)
+        self.txt_notes = QPlainTextEdit()
+        self.txt_notes.setPlaceholderText("Enter speaker notes here...")
+        notes_layout.addWidget(self.txt_notes)
+        layout.addWidget(grp_notes, 1)
+
+        # Signals
+        self.chk_paginate.clicked.connect(self._emit_change)
+        self.chk_header.clicked.connect(self._emit_change)
+        self.chk_footer.clicked.connect(self._emit_change)
+        self.txt_notes.textChanged.connect(self._emit_change)
+        
+        self.on_change_callback = None
+        self._updating_ui = False
+
+    def set_on_change(self, callback):
+        self.on_change_callback = callback
+
+    def _emit_change(self):
+        if self._updating_ui or not self.on_change_callback:
+            return
+        self.on_change_callback()
+
+    def load_from_slide_text(self, text: str):
+        self._updating_ui = True
+        try:
+            # Paginate
+            # <!-- paginate: true --> or <!-- paginate: false -->
+            # We assume default is false in many themes, but often true globally. 
+            # This checkbox specifically looks for local `paginate: true` or `paginate: false`
+            # For simplicity: Check if `paginate: true` is present locally.
+            pag_match = re.search(r'<!--\s*_?paginate:\s*(true|false)\s*-->', text, re.IGNORECASE)
+            if pag_match:
+                self.chk_paginate.setChecked(pag_match.group(1).lower() == 'true')
+            else:
+                self.chk_paginate.setChecked(False) # Default assumption or 'inherit' - simplified to False for now
+
+            # Header Hidden? <!-- _header: "" -->
+            # If `_header: ""` exists, it means HIDDEN -> Checked = False
+            header_hide = re.search(r'<!--\s*_header:\s*""\s*-->', text)
+            self.chk_header.setChecked(not bool(header_hide))
+
+            # Footer Hidden? <!-- _footer: "" -->
+            footer_hide = re.search(r'<!--\s*_footer:\s*""\s*-->', text)
+            self.chk_footer.setChecked(not bool(footer_hide))
+
+            # Notes
+            # Pattern: <!-- note: ... --> (single line) OR <!--\nnote:\n...\n-->
+            # We'll use a simpler regex that tries to capture the content.
+            # Limitation: Multiple comments might exist. We'll grab the first 'note' one.
+            note_match = re.search(r'<!--\s*note:\s*(.*?)\s*-->', text, re.DOTALL | re.IGNORECASE)
+            if note_match:
+                self.txt_notes.setPlainText(note_match.group(1).strip())
+            else:
+                self.txt_notes.setPlainText("")
+        finally:
+            self._updating_ui = False
+
+    def process_slide_text(self, text: str) -> str:
+        # 1. Update/Add Paginate
+        if self.chk_paginate.isChecked():
+            # Ensure `<!-- paginate: true -->` exists
+            if not re.search(r'<!--\s*paginate:\s*true\s*-->', text, re.IGNORECASE):
+                # If `paginate: false` exists, replace it
+                if re.search(r'<!--\s*paginate:\s*false\s*-->', text, re.IGNORECASE):
+                    text = re.sub(r'<!--\s*paginate:\s*false\s*-->', '<!-- paginate: true -->', text, count=1, flags=re.IGNORECASE)
+                else:
+                    text = '<!-- paginate: true -->\n' + text
+        else:
+            # We want `paginate: false` OR remove `paginate: true`?
+            # User interface implies "Show Page Number".
+            # If unchecked, we can force `paginate: false` locally to be sure.
+            if not re.search(r'<!--\s*paginate:\s*false\s*-->', text, re.IGNORECASE):
+                if re.search(r'<!--\s*paginate:\s*true\s*-->', text, re.IGNORECASE):
+                     text = re.sub(r'<!--\s*paginate:\s*true\s*-->', '<!-- paginate: false -->', text, count=1, flags=re.IGNORECASE)
+                else:
+                    # Append if missing
+                    # text = '<!-- paginate: false -->\n' + text
+                    # Actually, better not to spam 'false' if it's default. But ensuring 'false' overrides global.
+                    pass # user might just want to remove the 'true'. 
+                    # Refinement: If it was true, make it false? Or just remove it?
+                    # Let's simple toggle: Checkbox True -> `paginate: true`. Checkbox False -> remove `paginate: true` (revert to global/absent).
+                    pass
+            # Cleanup for unchecked: remove `paginate: true` if present
+            text = re.sub(r'<!--\s*paginate:\s*true\s*-->\n?', '', text, flags=re.IGNORECASE)
+
+
+        # 2. Header Visibility
+        # Checked = Show (Remove `_header: ""`)
+        # Unchecked = Hide (Add `_header: ""`)
+        if self.chk_header.isChecked():
+            text = re.sub(r'<!--\s*_header:\s*""\s*-->\n?', '', text)
+        else:
+            if not re.search(r'<!--\s*_header:\s*""\s*-->', text):
+                text = '<!-- _header: "" -->\n' + text
+
+        # 3. Footer Visibility
+        if self.chk_footer.isChecked():
+            text = re.sub(r'<!--\s*_footer:\s*""\s*-->\n?', '', text)
+        else:
+            if not re.search(r'<!--\s*_footer:\s*""\s*-->', text):
+                text = '<!-- _footer: "" -->\n' + text
+
+        # 4. Notes
+        # Remove existing note
+        text = re.sub(r'<!--\s*note:\s*(.*?)\s*-->\n?', '', text, flags=re.DOTALL | re.IGNORECASE)
+        
+        new_note = self.txt_notes.toPlainText().strip()
+        if new_note:
+            text = f"{text}\n<!--\nnote:\n{new_note}\n-->"
+
+        return text.strip()
+
+
 class MainWindow(QMainWindow):
+
 
     def __init__(self, initial_file: Optional[Path] = None, launch_cwd: Optional[Path] = None):
         super().__init__()
@@ -1017,7 +1167,15 @@ class MainWindow(QMainWindow):
         self.marp_cmd = find_marp_cli_command()
         
         # Initialize Template Manager
+        self.marp_cmd = find_marp_cli_command()
+        
+        # Initialize Template Manager
         self.template_manager = TemplateManager(Path(__file__).parent)
+
+        # Initialize Properties Widget
+        self.props_widget = SlidePropertiesWidget(self)
+        self.props_widget.set_on_change(self._on_props_changed)
+        self.addDockWidget(Qt.RightDockWidgetArea, self.props_widget)
 
         self.deck = DeckState.new_default()
         self._current_slide_idx = 0
@@ -1318,6 +1476,31 @@ class MainWindow(QMainWindow):
         self.setStatusBar(sb)
         self._update_status()
 
+    # ---------------- Props / Sync ----------------
+    def _on_props_changed(self):
+        """Called when a checkbox or note in the properties panel changes."""
+        if self._updating_editor:
+            return
+
+        # 1. Get current text from editor
+        current_txt = self.editor.toPlainText()
+        
+        # 2. Process via widget logic to apply changes
+        new_txt = self.props_widget.process_slide_text(current_txt)
+        
+        # 3. Update editor (this will trigger _on_editor_text_changed -> updating deck)
+        if new_txt != current_txt:
+            scroll = self.editor.verticalScrollBar().value()
+            cursor = self.editor.textCursor()
+            pos = cursor.position()
+            
+            self.editor.setPlainText(new_txt)
+            
+            # Try to restore cursor/scroll
+            self.editor.verticalScrollBar().setValue(scroll)
+            # cursor.setPosition(min(pos, len(new_txt))) # naive restore
+            # self.editor.setTextCursor(cursor)
+
     def _make_action(self, text: str, slot):
         act = QAction(text, self)
         act.triggered.connect(slot)
@@ -1388,7 +1571,10 @@ class MainWindow(QMainWindow):
     def _load_slide_into_editor(self, idx: int):
         self._updating_editor = True
         try:
-            self.editor.setPlainText(self.deck.slides[idx] or "")
+            txt = self.deck.slides[idx] or ""
+            self.editor.setPlainText(txt)
+            # Sync properties panel from text
+            self.props_widget.load_from_slide_text(txt)
         finally:
             self._updating_editor = False
 
@@ -1409,6 +1595,12 @@ class MainWindow(QMainWindow):
             return
         # Commit to deck model and refresh list item lazily (cheap enough for now)
         txt = self.editor.toPlainText().strip("\n")
+        
+        # Sync properties panel from text (NEW)
+        # We need to guard against recursion if prop widget updates trigger editor updates
+        # But load_from_slide_text sets internal flag so it won't emit back
+        self.props_widget.load_from_slide_text(txt)
+
         if self.deck.slides[self._current_slide_idx] != txt:
             self.deck.slides[self._current_slide_idx] = txt
             self.deck.dirty = True

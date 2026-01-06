@@ -27,4 +27,7 @@ style: |
 
 ---
 
+<!-- _footer: "" -->
+<!-- _header: "" -->
+<!-- paginate: false -->
 # New slide
